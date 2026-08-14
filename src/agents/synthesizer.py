@@ -6,8 +6,9 @@ import json
 
 from pydantic import BaseModel, Field
 
-from src.agents.llm import structured_invoke
+from src.agents.llm import KOREAN_OUTPUT_RULE, structured_invoke
 from src.agents.state import AgentState, TradeSignal
+from src.market.universe import resolve_symbol_name
 
 
 class _SynthOut(BaseModel):
@@ -16,26 +17,30 @@ class _SynthOut(BaseModel):
     entry_hint: float | None = None
     stop_loss: float | None = None
     take_profit: float | None = None
-    holding_period_hint: str = ""
-    rationale: str
+    holding_period_hint: str = Field(
+        default="", description="Korean holding period, e.g. 1-2 거래일"
+    )
+    rationale: str = Field(description="Korean rationale for the recommendation")
 
 
-SHORT_SYSTEM = """You are a short-term equity strategist for KR and US stocks.
+SHORT_SYSTEM = f"""You are a short-term equity strategist for KR and US stocks.
 Goal: identify trades that can realistically work within about 1–2 trading days.
 Emphasize momentum, volume confirmation, RSI/MACD, near breakouts, and news catalysts.
 Prefer HOLD unless evidence for a 1–2 day move is clear.
 action must be BUY, SELL, or HOLD.
 Suggest entry/stop/take-profit only for BUY/SELL, realistic vs last_close.
-holding_period_hint should be like "1-2 trading days".
+holding_period_hint should be like "1-2 거래일".
+{KOREAN_OUTPUT_RULE}
 """
 
-LONG_SYSTEM = """You are a long-term equity strategist for KR and US stocks.
+LONG_SYSTEM = f"""You are a long-term equity strategist for KR and US stocks.
 Goal: identify holdings suitable for multi-month to multi-year investment.
 Emphasize fundamentals (growth, margins, valuation), trend above major MAs, and durable thesis.
 Prefer HOLD unless the long-term setup is compelling.
 action must be BUY, SELL, or HOLD.
 Suggest entry/stop/take-profit only for BUY/SELL (wider stops OK for long-term).
-holding_period_hint should be like "3-12+ months".
+holding_period_hint should be like "3-12개월 이상".
+{KOREAN_OUTPUT_RULE}
 """
 
 
@@ -50,11 +55,13 @@ def _synthesize_one(
     source: str,
 ) -> TradeSignal:
     symbol = item["symbol"]
+    name = resolve_symbol_name(symbol, item.get("name"))
     market = item.get("market", "US")
     features = item.get("ohlcv_features") or {}
     last_close = features.get("last_close")
     payload = {
         "symbol": symbol,
+        "name": name,
         "market": market,
         "horizon": horizon,
         "last_close": last_close,
@@ -66,7 +73,7 @@ def _synthesize_one(
         "fundamental": item.get("fundamental_insight"),
     }
     system = SHORT_SYSTEM if horizon == "SHORT" else LONG_SYSTEM
-    default_period = "1-2 trading days" if horizon == "SHORT" else "3-12+ months"
+    default_period = "1-2 거래일" if horizon == "SHORT" else "3-12개월 이상"
 
     try:
         out = structured_invoke(
@@ -76,6 +83,7 @@ def _synthesize_one(
         )
         return TradeSignal(
             symbol=symbol,
+            name=name,
             market=market if market in {"KR", "US"} else "US",
             action=_normalize_action(out.action),  # type: ignore[arg-type]
             horizon=horizon,  # type: ignore[arg-type]
@@ -95,12 +103,13 @@ def _synthesize_one(
     except Exception as exc:  # noqa: BLE001
         return TradeSignal(
             symbol=symbol,
+            name=name,
             market=market if market in {"KR", "US"} else "US",
             action="HOLD",
             horizon=horizon,  # type: ignore[arg-type]
             confidence=0.2,
             holding_period_hint=default_period,
-            rationale=f"Synthesis failed ({horizon}): {exc}",
+            rationale=f"신호 합성 실패 ({horizon}): {exc}",
             news_summary=(item.get("news_insight") or {}).get("summary", ""),
             technical_summary=(item.get("technical_insight") or {}).get("summary", ""),
             fundamental_summary=(item.get("fundamental_insight") or {}).get("summary", ""),

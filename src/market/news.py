@@ -51,10 +51,9 @@ def filter_news_for_symbol(
     symbol_key = _normalize(symbol.split(".")[0])
     name_key = _normalize(name)
     keywords = {symbol_key, name_key}
-    # Common short aliases
-    if "samsung" in name_key:
+    if name_key in {"삼성전자"} or "samsung" in name_key:
         keywords.update({"samsung", "삼성전자", "삼성"})
-    if "hynix" in name_key:
+    if name_key in {"sk하이닉스", "하이닉스"} or "hynix" in name_key:
         keywords.update({"hynix", "하이닉스", "sk하이닉스"})
     if symbol_key in {"aapl", "msft", "nvda"}:
         keywords.add(symbol_key)

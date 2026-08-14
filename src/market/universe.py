@@ -17,45 +17,45 @@ class UniverseSymbol(TypedDict):
 
 # Major KOSPI / KOSDAQ liquid names (yfinance tickers).
 KR_UNIVERSE: list[UniverseSymbol] = [
-    {"symbol": "005930.KS", "market": "KR", "name": "Samsung Electronics"},
-    {"symbol": "000660.KS", "market": "KR", "name": "SK Hynix"},
-    {"symbol": "005380.KS", "market": "KR", "name": "Hyundai Motor"},
-    {"symbol": "000270.KS", "market": "KR", "name": "Kia"},
-    {"symbol": "035420.KS", "market": "KR", "name": "NAVER"},
-    {"symbol": "035720.KS", "market": "KR", "name": "Kakao"},
-    {"symbol": "051910.KS", "market": "KR", "name": "LG Chem"},
-    {"symbol": "006400.KS", "market": "KR", "name": "Samsung SDI"},
-    {"symbol": "207940.KS", "market": "KR", "name": "Samsung Biologics"},
-    {"symbol": "068270.KS", "market": "KR", "name": "Celltrion"},
-    {"symbol": "005490.KS", "market": "KR", "name": "POSCO Holdings"},
-    {"symbol": "105560.KS", "market": "KR", "name": "KB Financial"},
-    {"symbol": "055550.KS", "market": "KR", "name": "Shinhan Financial"},
-    {"symbol": "086790.KS", "market": "KR", "name": "Hana Financial"},
-    {"symbol": "032830.KS", "market": "KR", "name": "Samsung Life"},
-    {"symbol": "015760.KS", "market": "KR", "name": "KEPCO"},
-    {"symbol": "034730.KS", "market": "KR", "name": "SK Inc"},
-    {"symbol": "003550.KS", "market": "KR", "name": "LG Corp"},
-    {"symbol": "066570.KS", "market": "KR", "name": "LG Electronics"},
-    {"symbol": "009150.KS", "market": "KR", "name": "Samsung Electro-Mechanics"},
-    {"symbol": "012330.KS", "market": "KR", "name": "Hyundai Mobis"},
-    {"symbol": "028260.KS", "market": "KR", "name": "Samsung C&T"},
-    {"symbol": "096770.KS", "market": "KR", "name": "SK Innovation"},
-    {"symbol": "003670.KS", "market": "KR", "name": "POSCO Future M"},
-    {"symbol": "247540.KQ", "market": "KR", "name": "Ecopro BM"},
-    {"symbol": "086520.KQ", "market": "KR", "name": "Ecopro"},
-    {"symbol": "196170.KQ", "market": "KR", "name": "Alteogen"},
+    {"symbol": "005930.KS", "market": "KR", "name": "삼성전자"},
+    {"symbol": "000660.KS", "market": "KR", "name": "SK하이닉스"},
+    {"symbol": "005380.KS", "market": "KR", "name": "현대차"},
+    {"symbol": "000270.KS", "market": "KR", "name": "기아"},
+    {"symbol": "035420.KS", "market": "KR", "name": "네이버"},
+    {"symbol": "035720.KS", "market": "KR", "name": "카카오"},
+    {"symbol": "051910.KS", "market": "KR", "name": "LG화학"},
+    {"symbol": "006400.KS", "market": "KR", "name": "삼성SDI"},
+    {"symbol": "207940.KS", "market": "KR", "name": "삼성바이오로직스"},
+    {"symbol": "068270.KS", "market": "KR", "name": "셀트리온"},
+    {"symbol": "005490.KS", "market": "KR", "name": "POSCO홀딩스"},
+    {"symbol": "105560.KS", "market": "KR", "name": "KB금융"},
+    {"symbol": "055550.KS", "market": "KR", "name": "신한지주"},
+    {"symbol": "086790.KS", "market": "KR", "name": "하나금융지주"},
+    {"symbol": "032830.KS", "market": "KR", "name": "삼성생명"},
+    {"symbol": "015760.KS", "market": "KR", "name": "한국전력"},
+    {"symbol": "034730.KS", "market": "KR", "name": "SK"},
+    {"symbol": "003550.KS", "market": "KR", "name": "LG"},
+    {"symbol": "066570.KS", "market": "KR", "name": "LG전자"},
+    {"symbol": "009150.KS", "market": "KR", "name": "삼성전기"},
+    {"symbol": "012330.KS", "market": "KR", "name": "현대모비스"},
+    {"symbol": "028260.KS", "market": "KR", "name": "삼성물산"},
+    {"symbol": "096770.KS", "market": "KR", "name": "SK이노베이션"},
+    {"symbol": "003670.KS", "market": "KR", "name": "포스코퓨처엠"},
+    {"symbol": "247540.KQ", "market": "KR", "name": "에코프로비엠"},
+    {"symbol": "086520.KQ", "market": "KR", "name": "에코프로"},
+    {"symbol": "196170.KQ", "market": "KR", "name": "알테오젠"},
     {"symbol": "028300.KQ", "market": "KR", "name": "HLB"},
-    {"symbol": "041510.KQ", "market": "KR", "name": "SM Entertainment"},
-    {"symbol": "035900.KQ", "market": "KR", "name": "JYP Entertainment"},
-    {"symbol": "259960.KS", "market": "KR", "name": "Krafton"},
-    {"symbol": "036570.KS", "market": "KR", "name": "NCsoft"},
-    {"symbol": "251270.KS", "market": "KR", "name": "Netmarble"},
+    {"symbol": "041510.KQ", "market": "KR", "name": "에스엠"},
+    {"symbol": "035900.KQ", "market": "KR", "name": "JYP엔터"},
+    {"symbol": "259960.KS", "market": "KR", "name": "크래프톤"},
+    {"symbol": "036570.KS", "market": "KR", "name": "엔씨소프트"},
+    {"symbol": "251270.KS", "market": "KR", "name": "넷마블"},
     {"symbol": "011200.KS", "market": "KR", "name": "HMM"},
-    {"symbol": "010130.KS", "market": "KR", "name": "Korea Zinc"},
-    {"symbol": "009540.KS", "market": "KR", "name": "HD Korea Shipbuilding"},
-    {"symbol": "042660.KS", "market": "KR", "name": "Hanwha Ocean"},
-    {"symbol": "267250.KS", "market": "KR", "name": "HD Hyundai"},
-    {"symbol": "018260.KS", "market": "KR", "name": "Samsung SDS"},
+    {"symbol": "010130.KS", "market": "KR", "name": "고려아연"},
+    {"symbol": "009540.KS", "market": "KR", "name": "HD한국조선해양"},
+    {"symbol": "042660.KS", "market": "KR", "name": "한화오션"},
+    {"symbol": "267250.KS", "market": "KR", "name": "HD현대"},
+    {"symbol": "018260.KS", "market": "KR", "name": "삼성SDS"},
     {"symbol": "033780.KS", "market": "KR", "name": "KT&G"},
 ]
 
@@ -124,3 +124,19 @@ def get_default_universe() -> list[UniverseSymbol]:
         seen.add(item["symbol"])
         out.append(item)
     return out
+
+
+_UNIVERSE_NAME_BY_SYMBOL: dict[str, str] = {
+    item["symbol"]: item["name"] for item in [*KR_UNIVERSE, *US_UNIVERSE]
+}
+
+
+def lookup_symbol_name(symbol: str) -> str:
+    """Return the curated display name for a ticker, or empty string if unknown."""
+    return _UNIVERSE_NAME_BY_SYMBOL.get(symbol, "")
+
+
+def resolve_symbol_name(symbol: str, fallback: str | None = None) -> str:
+    """Return curated name, then fallback, then the ticker itself."""
+    return lookup_symbol_name(symbol) or (fallback or "").strip() or symbol
+

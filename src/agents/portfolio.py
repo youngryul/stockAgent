@@ -12,21 +12,21 @@ def _note_for(action: str | None, position: dict | None, horizon: str) -> str:
         avg_cost = position.get("avg_cost")
         if action == "BUY":
             return (
-                f"[{horizon_label}] Already holding {qty} @ {avg_cost}. "
-                "Treat BUY as add-on only if conviction remains high."
+                f"[{horizon_label}] 이미 {qty}주 보유 중 (평균단가 {avg_cost}). "
+                "확신이 높을 때만 추가 매수를 검토하세요."
             )
         if action == "SELL":
             return (
-                f"[{horizon_label}] Holding {qty} @ {avg_cost}. "
-                "SELL aligns with reducing or exiting."
+                f"[{horizon_label}] {qty}주 보유 중 (평균단가 {avg_cost}). "
+                "매도는 축소 또는 청산과 맞습니다."
             )
-        return f"[{horizon_label}] Holding {qty} @ {avg_cost}. HOLD keeps exposure unchanged."
+        return f"[{horizon_label}] {qty}주 보유 중 (평균단가 {avg_cost}). 관망 시 비중은 유지됩니다."
 
     if action == "SELL":
-        return f"[{horizon_label}] No open position; SELL is avoid/watch, not an exit order."
+        return f"[{horizon_label}] 보유 포지션 없음. 매도는 청산이 아니라 회피/관찰 신호입니다."
     if action == "BUY":
-        return f"[{horizon_label}] No open position; BUY is a candidate new entry."
-    return f"[{horizon_label}] No open position; remain on watch."
+        return f"[{horizon_label}] 보유 포지션 없음. 매수는 신규 진입 후보입니다."
+    return f"[{horizon_label}] 보유 포지션 없음. 관찰을 유지하세요."
 
 
 def portfolio_context(state: AgentState) -> dict:

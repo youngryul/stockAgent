@@ -27,7 +27,7 @@ from src.db.models import (
 from src.market.news import collect_news
 from src.market.prices import fetch_fundamental_snapshot, fetch_ohlcv, compute_technical_features
 from src.market.scanner import enrich_features, scan_universe
-from src.market.universe import get_default_universe
+from src.market.universe import get_default_universe, resolve_symbol_name
 from src.notify.discord import notify_recommendation_digest, notify_signals
 
 
@@ -137,7 +137,7 @@ def fetch_market_data(state: AgentState) -> dict:
 
     for item in state.get("symbols", []):
         symbol = item["symbol"]
-        name = item.get("name", symbol)
+        name = resolve_symbol_name(symbol, item.get("name"))
         features = item.get("ohlcv_features") or {}
 
         if not features or "error" in features or "last_close" not in features:
@@ -190,6 +190,11 @@ def persist_and_notify(state: AgentState, session: Session) -> dict:
         for signal_data in signal_list:
             if not signal_data:
                 continue
+            signal_data = dict(signal_data)
+            symbol = signal_data.get("symbol", item["symbol"])
+            signal_data["name"] = resolve_symbol_name(
+                symbol, item.get("name") or signal_data.get("name")
+            )
             row = Signal(
                 run_id=run_id,
                 symbol=signal_data.get("symbol", item["symbol"]),

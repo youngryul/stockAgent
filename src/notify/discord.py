@@ -8,8 +8,13 @@ from typing import Any
 import httpx
 
 from src.config import get_settings
+from src.market.universe import resolve_symbol_name
 
 logger = logging.getLogger(__name__)
+
+ACTION_LABELS = {"BUY": "매수", "SELL": "매도", "HOLD": "관망"}
+SOURCE_LABELS = {"WATCHLIST": "관심종목", "SCAN": "스캔"}
+MARKET_LABELS = {"KR": "한국", "US": "미국"}
 
 
 def _should_notify(signal: dict[str, Any], min_confidence: float) -> bool:
@@ -26,6 +31,30 @@ def _horizon_label(horizon: str | None) -> str:
     return "단타(1-2일)"
 
 
+def _action_label(action: str | None) -> str:
+    key = (action or "HOLD").upper()
+    return ACTION_LABELS.get(key, key)
+
+
+def _source_label(source: str | None) -> str:
+    key = (source or "").upper()
+    return SOURCE_LABELS.get(key, source or "-")
+
+
+def _market_label(market: str | None) -> str:
+    key = (market or "").upper()
+    return MARKET_LABELS.get(key, market or "-")
+
+
+def symbol_display_label(signal: dict[str, Any]) -> str:
+    """Return `종목명 (코드)` when a name is known, otherwise the ticker."""
+    symbol = str(signal.get("symbol") or "").strip()
+    name = resolve_symbol_name(symbol, signal.get("name"))
+    if name and name != symbol:
+        return f"{name} ({symbol})"
+    return symbol or "-"
+
+
 def format_embed(signal: dict[str, Any]) -> dict[str, Any]:
     """Build a Discord embed payload for one signal."""
     action = (signal.get("action") or "HOLD").upper()
@@ -34,37 +63,38 @@ def format_embed(signal: dict[str, Any]) -> dict[str, Any]:
     if horizon == "LONG" and action == "BUY":
         color = 0x3498DB
     confidence = float(signal.get("confidence") or 0.0)
+    action_label = _action_label(action)
 
     fields = [
-        {"name": "Horizon", "value": _horizon_label(horizon), "inline": True},
-        {"name": "Action", "value": action, "inline": True},
-        {"name": "Confidence", "value": f"{confidence:.0%}", "inline": True},
-        {"name": "Market", "value": signal.get("market", "-"), "inline": True},
-        {"name": "Source", "value": signal.get("source", "-"), "inline": True},
+        {"name": "투자 기간", "value": _horizon_label(horizon), "inline": True},
+        {"name": "추천", "value": action_label, "inline": True},
+        {"name": "신뢰도", "value": f"{confidence:.0%}", "inline": True},
+        {"name": "시장", "value": _market_label(signal.get("market")), "inline": True},
+        {"name": "출처", "value": _source_label(signal.get("source")), "inline": True},
         {
-            "name": "Hold period",
+            "name": "보유 기간",
             "value": signal.get("holding_period_hint") or "-",
             "inline": True,
         },
     ]
     if signal.get("entry_hint") is not None:
-        fields.append({"name": "Entry", "value": str(signal["entry_hint"]), "inline": True})
+        fields.append({"name": "진입가", "value": str(signal["entry_hint"]), "inline": True})
     if signal.get("stop_loss") is not None:
-        fields.append({"name": "Stop", "value": str(signal["stop_loss"]), "inline": True})
+        fields.append({"name": "손절", "value": str(signal["stop_loss"]), "inline": True})
     if signal.get("take_profit") is not None:
         fields.append(
-            {"name": "Take profit", "value": str(signal["take_profit"]), "inline": True}
+            {"name": "익절", "value": str(signal["take_profit"]), "inline": True}
         )
 
     description_parts = [
         signal.get("rationale") or "",
-        f"**News:** {signal.get('news_summary') or '-'}",
-        f"**Technical:** {signal.get('technical_summary') or '-'}",
-        f"**Fundamental:** {signal.get('fundamental_summary') or '-'}",
-        f"**Portfolio:** {signal.get('portfolio_note') or '-'}",
+        f"**뉴스:** {signal.get('news_summary') or '-'}",
+        f"**기술적 분석:** {signal.get('technical_summary') or '-'}",
+        f"**펀더멘털:** {signal.get('fundamental_summary') or '-'}",
+        f"**포트폴리오:** {signal.get('portfolio_note') or '-'}",
     ]
     return {
-        "title": f"[{_horizon_label(horizon)}] {signal.get('symbol')} - {action}",
+        "title": f"[{_horizon_label(horizon)}] {symbol_display_label(signal)} - {action_label}",
         "description": "\n".join(description_parts)[:4000],
         "color": color,
         "fields": fields,
@@ -125,15 +155,16 @@ def notify_recommendation_digest(signals: list[dict[str, Any]]) -> bool:
             return "_없음_"
         ranked = sorted(items, key=lambda x: float(x.get("confidence") or 0), reverse=True)
         parts = [
-            f"`{s.get('symbol')}` ({float(s.get('confidence') or 0):.0%})" for s in ranked[:8]
+            f"`{symbol_display_label(s)}` ({float(s.get('confidence') or 0):.0%})"
+            for s in ranked[:8]
         ]
         return ", ".join(parts)
 
     embed = {
         "title": "오늘의 추천 요약",
         "description": (
-            f"**단타(1-2일) BUY:** {_line(short_buys)}\n"
-            f"**장기 BUY:** {_line(long_buys)}\n\n"
+            f"**단타(1-2일) 매수:** {_line(short_buys)}\n"
+            f"**장기 매수:** {_line(long_buys)}\n\n"
             "_분석 참고용이며 투자 자문이 아닙니다._"
         ),
         "color": 0xF1C40F,

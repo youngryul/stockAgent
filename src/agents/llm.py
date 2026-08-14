@@ -12,6 +12,12 @@ from src.config import get_settings
 
 T = TypeVar("T", bound=BaseModel)
 
+KOREAN_OUTPUT_RULE = (
+    "Always write user-facing text (summary, rationale, holding_period_hint) in Korean. "
+    "For Korean (KR) stocks, refer to the company by Korean name together with the ticker, "
+    "e.g. 삼성전자 (005930.KS)."
+)
+
 
 def get_llm(temperature: float = 0.2) -> ChatOpenAI:
     """Create a ChatOpenAI client from settings."""

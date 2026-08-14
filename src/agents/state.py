@@ -12,7 +12,7 @@ class AgentInsight(BaseModel):
 
     bias: Literal["bullish", "bearish", "neutral"] = "neutral"
     confidence: float = Field(ge=0.0, le=1.0, default=0.5)
-    summary: str = ""
+    summary: str = Field(default="", description="Short Korean summary")
     details: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -20,6 +20,7 @@ class TradeSignal(BaseModel):
     """Final trading recommendation for one symbol and horizon."""
 
     symbol: str
+    name: str = ""
     market: Literal["KR", "US"]
     action: Literal["BUY", "SELL", "HOLD"]
     horizon: Literal["SHORT", "LONG"] = "SHORT"

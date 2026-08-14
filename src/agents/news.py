@@ -4,13 +4,15 @@ from __future__ import annotations
 
 import json
 
-from src.agents.llm import structured_invoke
+from src.agents.llm import KOREAN_OUTPUT_RULE, structured_invoke
 from src.agents.state import AgentInsight, AgentState
+from src.market.universe import resolve_symbol_name
 
 
-SYSTEM_PROMPT = """You are a sell-side equity news analyst for KR and US stocks.
+SYSTEM_PROMPT = f"""You are a sell-side equity news analyst for KR and US stocks.
 Assess recent headlines for short-to-medium term price impact.
 Be concise. Prefer evidence from the provided headlines only.
+{KOREAN_OUTPUT_RULE}
 """
 
 
@@ -21,7 +23,7 @@ def news_agent(state: AgentState) -> dict:
 
     for item in state.get("symbols", []):
         symbol = item["symbol"]
-        name = item.get("name", symbol)
+        name = resolve_symbol_name(symbol, item.get("name"))
         news = item.get("news") or []
         try:
             insight = structured_invoke(
@@ -41,7 +43,7 @@ def news_agent(state: AgentState) -> dict:
                 "news_insight": AgentInsight(
                     bias="neutral",
                     confidence=0.3,
-                    summary=f"News analysis failed: {exc}",
+                    summary=f"뉴스 분석 실패: {exc}",
                 ).model_dump(),
             }
         updated.append(item)
