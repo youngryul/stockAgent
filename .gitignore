@@ -13,3 +13,7 @@ dist/
 build/
 *.log
 pgdata/
+web/node_modules/
+web/.next/
+web/.env.local
+web/.env*.local

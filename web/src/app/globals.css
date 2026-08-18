@@ -1,0 +1,29 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+html,
+body {
+  min-height: 100%;
+}
+
+body {
+  background: radial-gradient(1200px 600px at 10% -10%, #152038 0%, transparent 55%),
+    radial-gradient(900px 500px at 100% 0%, #1a1408 0%, transparent 40%),
+    #070b14;
+}
+
+input,
+select,
+button,
+textarea {
+  font: inherit;
+}
+
+.num {
+  font-variant-numeric: tabular-nums;
+}

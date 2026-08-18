@@ -18,7 +18,6 @@ from src.agents.technical import technical_agent
 from src.config import get_settings
 from src.db.models import (
     AnalysisRun,
-    PortfolioPosition,
     RunMode,
     RunStatus,
     Signal,
@@ -31,17 +30,9 @@ from src.market.universe import get_default_universe, resolve_symbol_name
 from src.notify.discord import notify_recommendation_digest, notify_signals
 
 
-def _load_portfolio(session: Session) -> list[dict[str, Any]]:
-    positions = session.scalars(select(PortfolioPosition)).all()
-    return [
-        {
-            "symbol": p.symbol,
-            "market": p.market,
-            "quantity": p.quantity,
-            "avg_cost": p.avg_cost,
-        }
-        for p in positions
-    ]
+def _load_portfolio(_session: Session) -> list[dict[str, Any]]:
+    """Holdings are per-user on the web; shared signals must not mix accounts."""
+    return []
 
 
 def load_watchlist(state: AgentState, session: Session) -> dict:

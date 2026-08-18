@@ -6,6 +6,8 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Any, Optional
 
+from uuid import UUID as UuidType
+
 from sqlalchemy import (
     Boolean,
     DateTime,
@@ -17,7 +19,7 @@ from sqlalchemy import (
     UniqueConstraint,
     func,
 )
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -119,16 +121,32 @@ class Signal(Base):
 
 
 class PortfolioPosition(Base):
-    """Optional holdings used by the portfolio context agent."""
+    """Per-user holdings used by the web portfolio screen."""
 
     __tablename__ = "portfolio_positions"
-    __table_args__ = (UniqueConstraint("symbol", name="uq_portfolio_symbol"),)
+    __table_args__ = (
+        UniqueConstraint("user_id", "symbol", name="uq_portfolio_user_symbol"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[UuidType] = mapped_column(UUID(as_uuid=True), nullable=False, index=True)
     symbol: Mapped[str] = mapped_column(String(32), nullable=False)
     market: Mapped[str] = mapped_column(String(8), nullable=False)
+    name: Mapped[str] = mapped_column(String(128), nullable=False, default="")
     quantity: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     avg_cost: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+
+class PortfolioCash(Base):
+    """Per-user cash balance for the web portfolio screen."""
+
+    __tablename__ = "portfolio_cash"
+
+    user_id: Mapped[UuidType] = mapped_column(UUID(as_uuid=True), primary_key=True)
+    cash_amount: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
     )
