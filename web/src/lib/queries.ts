@@ -59,6 +59,20 @@ function toPosition(row: {
   };
 }
 
+function emptyPortfolio(loadError?: string): PortfolioSnapshot {
+  return {
+    cashAmount: 0,
+    positions: [],
+    holdingsAmount: 0,
+    totalAmount: 0,
+    loadError,
+  };
+}
+
+function errorMessage(error: { message?: string } | null): string {
+  return error?.message || "Supabase 조회에 실패했습니다.";
+}
+
 async function requireUserId(): Promise<string> {
   const supabase = await createClient();
   const {
@@ -76,6 +90,7 @@ async function requireUserId(): Promise<string> {
 export async function fetchLatestSignals(): Promise<{
   run: AnalysisRun | null;
   signals: Signal[];
+  loadError?: string;
 }> {
   const supabase = await createClient();
   const { data: runRow, error: runError } = await supabase
@@ -87,7 +102,7 @@ export async function fetchLatestSignals(): Promise<{
     .maybeSingle();
 
   if (runError) {
-    throw runError;
+    return { run: null, signals: [], loadError: errorMessage(runError) };
   }
   if (!runRow) {
     return { run: null, signals: [] };
@@ -103,7 +118,7 @@ export async function fetchLatestSignals(): Promise<{
     .order("id", { ascending: true });
 
   if (signalError) {
-    throw signalError;
+    return { run: null, signals: [], loadError: errorMessage(signalError) };
   }
 
   const snapshot = await fetchPortfolio();
@@ -150,7 +165,7 @@ export async function fetchLatestSignals(): Promise<{
     };
   });
 
-  return { run, signals };
+  return { run, signals, loadError: snapshot.loadError };
 }
 
 /**
@@ -158,7 +173,12 @@ export async function fetchLatestSignals(): Promise<{
  */
 export async function fetchPortfolio(): Promise<PortfolioSnapshot> {
   const supabase = await createClient();
-  const userId = await requireUserId();
+  let userId: string;
+  try {
+    userId = await requireUserId();
+  } catch (error) {
+    return emptyPortfolio(error instanceof Error ? error.message : "로그인이 필요합니다.");
+  }
 
   const { data: cashRow, error: cashError } = await supabase
     .from("portfolio_cash")
@@ -166,7 +186,7 @@ export async function fetchPortfolio(): Promise<PortfolioSnapshot> {
     .eq("user_id", userId)
     .maybeSingle();
   if (cashError) {
-    throw cashError;
+    return emptyPortfolio(errorMessage(cashError));
   }
 
   const { data: positionRows, error: positionError } = await supabase
@@ -175,7 +195,7 @@ export async function fetchPortfolio(): Promise<PortfolioSnapshot> {
     .eq("user_id", userId)
     .order("id", { ascending: true });
   if (positionError) {
-    throw positionError;
+    return emptyPortfolio(errorMessage(positionError));
   }
 
   const positions = (positionRows || []).map(toPosition);

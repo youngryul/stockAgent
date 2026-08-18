@@ -44,4 +44,5 @@ export type PortfolioSnapshot = {
   positions: PortfolioPosition[];
   holdingsAmount: number;
   totalAmount: number;
+  loadError?: string;
 };

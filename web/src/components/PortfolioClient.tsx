@@ -26,7 +26,7 @@ export function PortfolioClient({
   const [cashInput, setCashInput] = useState(String(initial.cashAmount || ""));
   const [form, setForm] = useState(EMPTY_FORM);
   const [editingId, setEditingId] = useState<number | null>(null);
-  const [error, setError] = useState("");
+  const [error, setError] = useState(initial.loadError || "");
   const [pending, setPending] = useState(false);
 
   const krHoldings = data.positions

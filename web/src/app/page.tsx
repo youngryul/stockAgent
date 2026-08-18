@@ -11,6 +11,8 @@ export default async function HomePage(): Promise<ReactElement> {
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  const { run, signals } = await fetchLatestSignals();
-  return <DashboardClient run={run} signals={signals} email={user?.email} />;
+  const { run, signals, loadError } = await fetchLatestSignals();
+  return (
+    <DashboardClient run={run} signals={signals} email={user?.email} loadError={loadError} />
+  );
 }

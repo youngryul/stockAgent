@@ -4,6 +4,7 @@ import { useState, type FormEvent, type ReactElement } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
 import { createClient } from "@/lib/supabase/client";
+import { translateAuthError } from "@/lib/auth-errors";
 
 type Mode = "login" | "signup";
 
@@ -33,7 +34,7 @@ export function LoginForm(): ReactElement {
           },
         });
         if (signUpError) {
-          setError(signUpError.message);
+          setError(translateAuthError(signUpError.message));
           return;
         }
         if (!data.session) {
@@ -46,7 +47,7 @@ export function LoginForm(): ReactElement {
           password,
         });
         if (signInError) {
-          setError("이메일 또는 비밀번호가 올바르지 않습니다.");
+          setError(translateAuthError(signInError.message));
           return;
         }
       }

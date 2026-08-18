@@ -20,9 +20,15 @@ type DashboardClientProps = {
   run: AnalysisRun | null;
   signals: Signal[];
   email?: string | null;
+  loadError?: string;
 };
 
-export function DashboardClient({ run, signals, email }: DashboardClientProps): ReactElement {
+export function DashboardClient({
+  run,
+  signals,
+  email,
+  loadError,
+}: DashboardClientProps): ReactElement {
   const [filter, setFilter] = useState<FilterId>("ALL");
 
   const shortBuys = signals.filter((item) => item.action === "BUY" && item.horizon === "SHORT");
@@ -49,6 +55,12 @@ export function DashboardClient({ run, signals, email }: DashboardClientProps): 
 
   return (
     <AppShell title="오늘의 분석" subtitle={subtitle} email={email}>
+      {loadError ? (
+        <p className="mb-5 rounded-xl border border-sell/40 bg-sell/10 px-4 py-3 text-sm text-sell">
+          {loadError} — Supabase에 테이블/마이그레이션이 없으면 이 오류가 납니다. Docker 에이전트의
+          DATABASE_URL을 같은 프로젝트로 맞춘 뒤 `alembic upgrade head`를 실행하세요.
+        </p>
+      ) : null}
       <section className="mb-6 grid gap-3 sm:grid-cols-3">
         <SummaryChip label="시그널" value={`${signals.length}`} />
         <SummaryChip label="단타 매수" value={`${shortBuys.length}`} accent="buy" />
