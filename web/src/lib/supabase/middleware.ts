@@ -2,17 +2,15 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
 import { isPublicPath } from "@/lib/auth";
+import { getSupabaseAnonKey, getSupabaseUrl } from "@/lib/supabase/env";
 
 /**
  * Refresh the Supabase session and redirect unauthenticated users to /login.
  * @param request - Incoming middleware request
  */
 export async function updateSession(request: NextRequest): Promise<NextResponse> {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  if (!url || !key) {
-    throw new Error("NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY are required");
-  }
+  const url = getSupabaseUrl();
+  const key = getSupabaseAnonKey();
 
   let supabaseResponse = NextResponse.next({ request });
   const supabase = createServerClient(url, key, {

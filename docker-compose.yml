@@ -1,5 +1,16 @@
 services:
+  app:
+    build: .
+    env_file:
+      - .env
+    command: >
+      sh -c "alembic upgrade head &&
+             python -m src.main seed &&
+             python -m src.main schedule"
+    restart: unless-stopped
+
   db:
+    profiles: ["local-db"]
     image: postgres:16-alpine
     environment:
       POSTGRES_USER: stock
@@ -14,21 +25,6 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
-
-  app:
-    build: .
-    depends_on:
-      db:
-        condition: service_healthy
-    env_file:
-      - .env
-    environment:
-      DATABASE_URL: postgresql+psycopg2://stock:stock@db:5432/stockagent
-    command: >
-      sh -c "alembic upgrade head &&
-             python -m src.main seed &&
-             python -m src.main schedule"
-    restart: unless-stopped
 
 volumes:
   pgdata:

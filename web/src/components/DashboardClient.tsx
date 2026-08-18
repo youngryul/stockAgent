@@ -2,7 +2,7 @@
 
 import { useMemo, useState, type ReactElement } from "react";
 
-import { AppShell } from "@/components/AppShell";
+import { PageHeading } from "@/components/AppShell";
 import { SignalCard } from "@/components/SignalCard";
 import { formatDateTime } from "@/lib/format";
 import type { AnalysisRun, Signal } from "@/lib/types";
@@ -19,14 +19,12 @@ const FILTERS: { id: FilterId; label: string }[] = [
 type DashboardClientProps = {
   run: AnalysisRun | null;
   signals: Signal[];
-  email?: string | null;
   loadError?: string;
 };
 
 export function DashboardClient({
   run,
   signals,
-  email,
   loadError,
 }: DashboardClientProps): ReactElement {
   const [filter, setFilter] = useState<FilterId>("ALL");
@@ -54,7 +52,8 @@ export function DashboardClient({
     : "아직 완료된 분석이 없습니다. Docker 에이전트가 DB에 시그널을 쌓으면 여기에 표시됩니다.";
 
   return (
-    <AppShell title="오늘의 분석" subtitle={subtitle} email={email}>
+    <>
+      <PageHeading title="오늘의 분석" subtitle={subtitle} />
       {loadError ? (
         <p className="mb-5 rounded-xl border border-sell/40 bg-sell/10 px-4 py-3 text-sm text-sell">
           {loadError} — Supabase에 테이블/마이그레이션이 없으면 이 오류가 납니다. Docker 에이전트의
@@ -95,7 +94,7 @@ export function DashboardClient({
           ))}
         </div>
       )}
-    </AppShell>
+    </>
   );
 }
 

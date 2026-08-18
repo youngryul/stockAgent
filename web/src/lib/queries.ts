@@ -93,19 +93,22 @@ export async function fetchLatestSignals(): Promise<{
   loadError?: string;
 }> {
   const supabase = await createClient();
-  const { data: runRow, error: runError } = await supabase
-    .from("analysis_runs")
-    .select("id, status, mode, started_at, finished_at, error_message")
-    .eq("status", "COMPLETED")
-    .order("id", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+  const [{ data: runRow, error: runError }, snapshot] = await Promise.all([
+    supabase
+      .from("analysis_runs")
+      .select("id, status, mode, started_at, finished_at, error_message")
+      .eq("status", "COMPLETED")
+      .order("id", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    fetchPortfolio(),
+  ]);
 
   if (runError) {
     return { run: null, signals: [], loadError: errorMessage(runError) };
   }
   if (!runRow) {
-    return { run: null, signals: [] };
+    return { run: null, signals: [], loadError: snapshot.loadError };
   }
 
   const { data: rows, error: signalError } = await supabase
@@ -120,8 +123,6 @@ export async function fetchLatestSignals(): Promise<{
   if (signalError) {
     return { run: null, signals: [], loadError: errorMessage(signalError) };
   }
-
-  const snapshot = await fetchPortfolio();
   const held = new Map(
     snapshot.positions.map((position) => [
       position.symbol,
@@ -180,20 +181,18 @@ export async function fetchPortfolio(): Promise<PortfolioSnapshot> {
     return emptyPortfolio(error instanceof Error ? error.message : "로그인이 필요합니다.");
   }
 
-  const { data: cashRow, error: cashError } = await supabase
-    .from("portfolio_cash")
-    .select("cash_amount")
-    .eq("user_id", userId)
-    .maybeSingle();
+  const [{ data: cashRow, error: cashError }, { data: positionRows, error: positionError }] =
+    await Promise.all([
+      supabase.from("portfolio_cash").select("cash_amount").eq("user_id", userId).maybeSingle(),
+      supabase
+        .from("portfolio_positions")
+        .select("id, symbol, market, name, quantity, avg_cost, updated_at")
+        .eq("user_id", userId)
+        .order("id", { ascending: true }),
+    ]);
   if (cashError) {
     return emptyPortfolio(errorMessage(cashError));
   }
-
-  const { data: positionRows, error: positionError } = await supabase
-    .from("portfolio_positions")
-    .select("id, symbol, market, name, quantity, avg_cost, updated_at")
-    .eq("user_id", userId)
-    .order("id", { ascending: true });
   if (positionError) {
     return emptyPortfolio(errorMessage(positionError));
   }

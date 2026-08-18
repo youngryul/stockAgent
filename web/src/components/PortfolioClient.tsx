@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState, type FormEvent, type ReactElement } from "react";
 
-import { AppShell } from "@/components/AppShell";
+import { PageHeading } from "@/components/AppShell";
 import { displaySymbol, formatMoney, formatNumber } from "@/lib/format";
 import type { PortfolioPosition, PortfolioSnapshot } from "@/lib/types";
 import { lookupUniverseMarket, lookupUniverseName, UNIVERSE } from "@/lib/universe-names";
@@ -17,10 +17,8 @@ const EMPTY_FORM = {
 
 export function PortfolioClient({
   initial,
-  email,
 }: {
   initial: PortfolioSnapshot;
-  email?: string | null;
 }): ReactElement {
   const [data, setData] = useState(initial);
   const [cashInput, setCashInput] = useState(String(initial.cashAmount || ""));
@@ -161,11 +159,11 @@ export function PortfolioClient({
       : null;
 
   return (
-    <AppShell
-      title="보유종목"
-      subtitle="현금과 보유 수량·단가를 입력하면 다음 분석에 반영됩니다. 주문은 실행하지 않습니다."
-      email={email}
-    >
+    <>
+      <PageHeading
+        title="보유종목"
+        subtitle="현금과 보유 수량·단가를 입력하면 다음 분석에 반영됩니다. 주문은 실행하지 않습니다."
+      />
       <section className="mb-6 grid gap-3 sm:grid-cols-3">
         <StatCard label="현금 잔고" value={formatMoney(data.cashAmount, "KR")} />
         <StatCard label="한국 매수금액" value={formatMoney(krHoldings, "KR")} />
@@ -391,7 +389,7 @@ export function PortfolioClient({
           </tbody>
         </table>
       </div>
-    </AppShell>
+    </>
   );
 }
 

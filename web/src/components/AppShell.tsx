@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import type { ReactElement, ReactNode } from "react";
+import { useEffect, useState, type ReactElement, type ReactNode } from "react";
 
 import { createClient } from "@/lib/supabase/client";
 
@@ -12,15 +12,21 @@ const NAV = [
 ];
 
 type AppShellProps = {
-  title: string;
-  subtitle?: string;
   email?: string | null;
   children: ReactNode;
 };
 
-export function AppShell({ title, subtitle, email, children }: AppShellProps): ReactElement {
+/**
+ * Shared chrome for signed-in pages. Nav stays mounted while page data loads.
+ */
+export function AppShell({ email, children }: AppShellProps): ReactElement {
   const pathname = usePathname();
   const router = useRouter();
+  const [pendingHref, setPendingHref] = useState<string | null>(null);
+
+  useEffect(() => {
+    setPendingHref(null);
+  }, [pathname]);
 
   async function onLogout(): Promise<void> {
     const supabase = createClient();
@@ -36,23 +42,26 @@ export function AppShell({ title, subtitle, email, children }: AppShellProps): R
           <p className="mb-1 text-[11px] font-medium uppercase tracking-[0.28em] text-gold">
             Stock Agent
           </p>
-          <h1 className="text-2xl font-semibold tracking-tight md:text-3xl">{title}</h1>
-          {subtitle ? <p className="mt-1 text-sm text-hold">{subtitle}</p> : null}
         </div>
         <div className="flex flex-wrap items-center justify-end gap-2">
           {email ? <span className="mr-1 hidden text-xs text-hold sm:inline">{email}</span> : null}
           <nav className="flex rounded-full border border-line bg-ink-800 p-1">
             {NAV.map((item) => {
               const active = pathname === item.href;
+              const pending = pendingHref === item.href && !active;
               return (
                 <Link
                   key={item.href}
                   href={item.href}
-                  className={
-                    active
-                      ? "rounded-full bg-gold px-4 py-1.5 text-sm font-medium text-ink-950"
-                      : "rounded-full px-4 py-1.5 text-sm text-hold hover:text-slate-100"
-                  }
+                  prefetch
+                  aria-current={active ? "page" : undefined}
+                  aria-busy={pending}
+                  onClick={() => {
+                    if (!active) {
+                      setPendingHref(item.href);
+                    }
+                  }}
+                  className={navClassName(active, pending)}
                 >
                   {item.label}
                 </Link>
@@ -71,4 +80,32 @@ export function AppShell({ title, subtitle, email, children }: AppShellProps): R
       {children}
     </div>
   );
+}
+
+/**
+ * Page title shown under the persistent nav.
+ */
+export function PageHeading({
+  title,
+  subtitle,
+}: {
+  title: string;
+  subtitle?: string;
+}): ReactElement {
+  return (
+    <div className="mb-6">
+      <h1 className="text-2xl font-semibold tracking-tight md:text-3xl">{title}</h1>
+      {subtitle ? <p className="mt-1 text-sm text-hold">{subtitle}</p> : null}
+    </div>
+  );
+}
+
+function navClassName(active: boolean, pending: boolean): string {
+  if (active) {
+    return "rounded-full bg-gold px-4 py-1.5 text-sm font-medium text-ink-950";
+  }
+  if (pending) {
+    return "rounded-full bg-gold/25 px-4 py-1.5 text-sm font-medium text-gold";
+  }
+  return "rounded-full px-4 py-1.5 text-sm text-hold hover:text-slate-100";
 }
