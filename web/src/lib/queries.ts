@@ -7,6 +7,7 @@ import { portfolioNoteFor } from "@/lib/portfolio-note";
 import { createClient } from "@/lib/supabase/server";
 import type {
   AnalysisRun,
+  AnalysisRequest,
   KisCredentialStatus,
   KisSavedAccount,
   PortfolioPosition,
@@ -623,4 +624,74 @@ export async function applySignalTargets(
     throw error;
   }
   return data ? toPosition(data) : null;
+}
+
+function toAnalysisRequest(row: {
+  id: number;
+  status: string;
+  mode: string;
+  requested_at: string | null;
+  started_at: string | null;
+  finished_at: string | null;
+  error_message: string | null;
+}): AnalysisRequest {
+  return {
+    id: row.id,
+    status: row.status,
+    mode: row.mode,
+    requestedAt: asIso(row.requested_at),
+    startedAt: asIso(row.started_at),
+    finishedAt: asIso(row.finished_at),
+    errorMessage: row.error_message,
+  };
+}
+
+/**
+ * Latest analysis request, if the table exists.
+ */
+export async function fetchLatestAnalysisRequest(): Promise<AnalysisRequest | null> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("analysis_requests")
+    .select("id, status, mode, requested_at, started_at, finished_at, error_message")
+    .order("id", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error || !data) {
+    return null;
+  }
+  return toAnalysisRequest(data);
+}
+
+/**
+ * Queue a scan for the Docker scheduler. Reuses a pending or running request.
+ */
+export async function enqueueAnalysisRequest(): Promise<AnalysisRequest> {
+  const supabase = await createClient();
+  const userId = await requireUserId();
+  const { data: openRows, error: openError } = await supabase
+    .from("analysis_requests")
+    .select("id, status, mode, requested_at, started_at, finished_at, error_message")
+    .in("status", ["PENDING", "RUNNING"])
+    .order("id", { ascending: true })
+    .limit(1);
+  if (openError) {
+    throw openError;
+  }
+  if (openRows && openRows[0]) {
+    return toAnalysisRequest(openRows[0]);
+  }
+  const { data, error } = await supabase
+    .from("analysis_requests")
+    .insert({
+      user_id: userId,
+      status: "PENDING",
+      mode: "scan",
+    })
+    .select("id, status, mode, requested_at, started_at, finished_at, error_message")
+    .single();
+  if (error) {
+    throw error;
+  }
+  return toAnalysisRequest(data);
 }

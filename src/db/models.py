@@ -57,6 +57,7 @@ class SignalHorizon(StrEnum):
 class SignalSource(StrEnum):
     WATCHLIST = "WATCHLIST"
     SCAN = "SCAN"
+    PORTFOLIO = "PORTFOLIO"
 
 
 class WatchlistItem(Base):
@@ -152,3 +153,20 @@ class PortfolioCash(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
     )
+
+
+class AnalysisRequest(Base):
+    """Web-triggered analysis job picked up by the Docker scheduler."""
+
+    __tablename__ = "analysis_requests"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[UuidType] = mapped_column(UUID(as_uuid=True), nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="PENDING")
+    mode: Mapped[str] = mapped_column(String(16), nullable=False, default="scan")
+    requested_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    started_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    finished_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)

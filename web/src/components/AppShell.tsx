@@ -36,7 +36,7 @@ export function AppShell({ email, children }: AppShellProps): ReactElement {
   }
 
   return (
-    <div className="mx-auto min-h-screen max-w-6xl px-4 pb-16 pt-6 md:px-8">
+    <div className="mx-auto min-h-screen max-w-7xl px-4 pb-16 pt-6 md:px-8">
       <header className="mb-8 flex flex-wrap items-end justify-between gap-4 border-b border-line/70 pb-5">
         <div>
           <p className="mb-1 text-[11px] font-medium uppercase tracking-[0.28em] text-gold">

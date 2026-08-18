@@ -4,6 +4,13 @@ import { useState, type MouseEvent, type ReactElement } from "react";
 
 import { SOURCE_LABELS } from "@/lib/constants";
 import {
+  HOLDING_STANCE_BADGE,
+  HOLDING_STANCE_BAR,
+  HOLDING_STANCE_CARD,
+  HOLDING_STANCE_LABELS,
+  holdingStance,
+} from "@/lib/holding-stance";
+import {
   actionLabel,
   displaySymbol,
   formatDateTime,
@@ -35,8 +42,14 @@ type SignalCardProps = {
  * Collapsed signal summary. Rationale and specialist notes expand on click.
  */
 export function SignalCard({ signal, hideSymbol = false }: SignalCardProps): ReactElement {
-  const actionClass = ACTION_CLASS[signal.action] || ACTION_CLASS.HOLD;
-  const barClass = BAR_CLASS[signal.action] || BAR_CLASS.HOLD;
+  const stance = holdingStance(signal);
+  const actionClass = stance
+    ? HOLDING_STANCE_BADGE[stance]
+    : ACTION_CLASS[signal.action] || ACTION_CLASS.HOLD;
+  const barClass = stance ? HOLDING_STANCE_BAR[stance] : BAR_CLASS[signal.action] || BAR_CLASS.HOLD;
+  const cardClass = stance
+    ? HOLDING_STANCE_CARD[stance]
+    : "border-line bg-ink-800/70 open:bg-ink-800";
   const [pending, setPending] = useState(false);
   const [saved, setSaved] = useState(false);
   const [saveError, setSaveError] = useState("");
@@ -73,7 +86,9 @@ export function SignalCard({ signal, hideSymbol = false }: SignalCardProps): Rea
   }
 
   return (
-    <details className="group relative overflow-hidden rounded-2xl border border-line bg-ink-800/70 open:bg-ink-800">
+    <details
+      className={`group relative overflow-hidden rounded-2xl border ${cardClass}`}
+    >
       <summary className="cursor-pointer list-none p-5 [&::-webkit-details-marker]:hidden">
         <span className={`absolute inset-y-0 left-0 w-1 ${barClass}`} />
         <div className="mb-3 flex flex-wrap items-start justify-between gap-2 pl-2">
@@ -98,7 +113,7 @@ export function SignalCard({ signal, hideSymbol = false }: SignalCardProps): Rea
               </span>
             )}
             <span className={`rounded-full border px-2 py-0.5 text-xs ${actionClass}`}>
-              {actionLabel(signal.action)}
+              {stance ? HOLDING_STANCE_LABELS[stance] : actionLabel(signal.action)}
             </span>
             <span className="rounded-full border border-line px-2 py-0.5 font-mono text-xs num">
               {formatPercent(signal.confidence)}

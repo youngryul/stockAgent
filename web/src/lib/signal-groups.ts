@@ -1,4 +1,3 @@
-import { HIGH_CONVICTION_MIN } from "@/lib/constants";
 import type { Signal } from "@/lib/types";
 
 export type ScanGroup = {
@@ -30,7 +29,7 @@ function sortHorizons(left: Signal, right: Signal): number {
 }
 
 /**
- * Group filtered signals by ticker, then by scan run (newest first).
+ * Group filtered signals by ticker, then by scan run. Newest scans are listed first.
  * @param signals - Signals after dashboard filters
  */
 export function groupSignalsBySymbol(signals: Signal[]): SymbolGroup[] {
@@ -67,37 +66,25 @@ export function groupSignalsBySymbol(signals: Signal[]): SymbolGroup[] {
   return groups.sort(compareSymbolGroups);
 }
 
-function latestSignals(group: SymbolGroup): Signal[] {
-  return group.scans[0]?.signals || [];
-}
-
-function groupRank(group: SymbolGroup): number {
-  const latest = latestSignals(group);
-  const highConviction = latest.some(
-    (item) =>
-      (item.action === "BUY" || item.action === "SELL") && item.confidence >= HIGH_CONVICTION_MIN,
-  );
-  if (highConviction) {
-    return 0;
-  }
-  if (latest.some((item) => item.action === "BUY" || item.action === "SELL")) {
-    return 1;
-  }
-  return 2;
+function latestScan(group: SymbolGroup): ScanGroup | undefined {
+  return group.scans[0];
 }
 
 function maxLatestConfidence(group: SymbolGroup): number {
-  return latestSignals(group).reduce((max, item) => Math.max(max, item.confidence), 0);
+  return (latestScan(group)?.signals || []).reduce(
+    (max, item) => Math.max(max, item.confidence),
+    0,
+  );
 }
 
 function compareSymbolGroups(left: SymbolGroup, right: SymbolGroup): number {
-  const rank = groupRank(left) - groupRank(right);
-  if (rank !== 0) {
-    return rank;
-  }
-  const time = laterIso(left.scans[0]?.scannedAt || null, right.scans[0]?.scannedAt || null);
+  const time = laterIso(latestScan(left)?.scannedAt || null, latestScan(right)?.scannedAt || null);
   if (time !== 0) {
     return time;
+  }
+  const runId = (latestScan(right)?.runId || 0) - (latestScan(left)?.runId || 0);
+  if (runId !== 0) {
+    return runId;
   }
   return maxLatestConfidence(right) - maxLatestConfidence(left);
 }

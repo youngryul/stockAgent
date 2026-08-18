@@ -48,6 +48,16 @@ export type PortfolioPosition = {
   updatedAt: string | null;
 };
 
+export type AnalysisRequest = {
+  id: number;
+  status: string;
+  mode: string;
+  requestedAt: string | null;
+  startedAt: string | null;
+  finishedAt: string | null;
+  errorMessage: string | null;
+};
+
 export type KisSavedAccount = {
   accountKey: string;
   accountLabel: string;

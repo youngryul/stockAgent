@@ -13,7 +13,7 @@ from src.market.universe import resolve_symbol_name
 logger = logging.getLogger(__name__)
 
 ACTION_LABELS = {"BUY": "매수", "SELL": "매도", "HOLD": "관망"}
-SOURCE_LABELS = {"WATCHLIST": "관심종목", "SCAN": "스캔"}
+SOURCE_LABELS = {"WATCHLIST": "관심종목", "SCAN": "스캔", "PORTFOLIO": "보유"}
 MARKET_LABELS = {"KR": "한국", "US": "미국"}
 
 

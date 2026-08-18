@@ -17,6 +17,7 @@ export const MARKET_LABELS: Record<string, string> = {
 export const SOURCE_LABELS: Record<string, string> = {
   WATCHLIST: "관심종목",
   SCAN: "스캔",
+  PORTFOLIO: "보유",
 };
 
 /** Display and “today” filtering timezone for the dashboard. */

@@ -16,6 +16,7 @@ const config: Config = {
         gold: "#d4a24c",
         buy: "#3dd68c",
         sell: "#f07178",
+        fresh: "#b794f6",
         hold: "#8b9bb4",
       },
       fontFamily: {

@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import logging
+import time
 from datetime import datetime, timezone
 from typing import Any
 
 from langgraph.graph import END, START, StateGraph
-from sqlalchemy import select
+from sqlalchemy import delete, select
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
 from src.agents.fundamental import fundamental_agent
@@ -19,21 +22,76 @@ from src.config import get_settings
 from src.db.history import load_latest_completed_signals
 from src.db.models import (
     AnalysisRun,
+    PortfolioPosition,
     RunMode,
     RunStatus,
     Signal,
     WatchlistItem,
 )
+from src.db.session import SessionLocal
 from src.market.news import collect_news
 from src.market.prices import fetch_fundamental_snapshot, fetch_ohlcv, compute_technical_features
 from src.market.scanner import enrich_features, scan_universe
 from src.market.universe import get_default_universe, resolve_symbol_name
 from src.notify.discord import notify_recommendation_digest, notify_signals
 
+logger = logging.getLogger("stock-agent")
+PERSIST_RETRY_ATTEMPTS = 3
+PERSIST_RETRY_SLEEP_SECONDS = 2
+
 
 def _load_portfolio(_session: Session) -> list[dict[str, Any]]:
-    """Holdings are per-user on the web; shared signals must not mix accounts."""
+    """Holdings are per-user on the web; shared LLM notes must not mix accounts."""
     return []
+
+
+def _merge_required_symbol(
+    symbols: list[dict[str, Any]],
+    *,
+    symbol: str,
+    market: str,
+    name: str,
+    source: str,
+    overwrite_source: bool = True,
+) -> None:
+    """Ensure a ticker is in the run with both short and long horizons."""
+    for item in symbols:
+        if item.get("symbol") != symbol:
+            continue
+        item["horizons"] = ["SHORT", "LONG"]
+        if overwrite_source:
+            item["source"] = source
+        if name and not item.get("name"):
+            item["name"] = name
+        return
+    symbols.append(
+        {
+            "symbol": symbol,
+            "market": market or "US",
+            "name": name or resolve_symbol_name(symbol),
+            "horizons": ["SHORT", "LONG"],
+            "source": source,
+        }
+    )
+
+
+def _append_holdings(session: Session, symbols: list[dict[str, Any]]) -> None:
+    """Always analyze unique held tickers (quantity > 0), both horizons."""
+    rows = session.scalars(
+        select(PortfolioPosition).where(PortfolioPosition.quantity > 0).order_by(PortfolioPosition.id)
+    ).all()
+    seen: set[str] = set()
+    for row in rows:
+        if row.symbol in seen:
+            continue
+        seen.add(row.symbol)
+        _merge_required_symbol(
+            symbols,
+            symbol=row.symbol,
+            market=row.market,
+            name=row.name,
+            source="PORTFOLIO",
+        )
 
 
 def load_watchlist(state: AgentState, session: Session) -> dict:
@@ -51,6 +109,7 @@ def load_watchlist(state: AgentState, session: Session) -> dict:
         }
         for row in rows
     ]
+    _append_holdings(session, symbols)
     return {
         "mode": "watchlist",
         "symbols": symbols,
@@ -60,7 +119,7 @@ def load_watchlist(state: AgentState, session: Session) -> dict:
 
 
 def load_scan_candidates(state: AgentState, session: Session) -> dict:
-    """Scan KR/US universe, keep top short/long candidates (+ optional watchlist)."""
+    """Scan KR/US universe, keep top short/long candidates, plus watchlist and holdings."""
     settings = get_settings()
     errors: list[str] = []
     try:
@@ -84,29 +143,20 @@ def load_scan_candidates(state: AgentState, session: Session) -> dict:
     ]
 
     if settings.scan_include_watchlist:
-        existing = {s["symbol"] for s in symbols}
         rows = session.scalars(
             select(WatchlistItem).where(WatchlistItem.enabled.is_(True))
         ).all()
         for row in rows:
-            if row.symbol in existing:
-                # Ensure both horizons if already selected
-                for s in symbols:
-                    if s["symbol"] == row.symbol:
-                        horizons = set(s.get("horizons") or [])
-                        horizons.update({"SHORT", "LONG"})
-                        s["horizons"] = list(horizons)
-                        break
-                continue
-            symbols.append(
-                {
-                    "symbol": row.symbol,
-                    "market": row.market,
-                    "name": row.name,
-                    "horizons": ["SHORT", "LONG"],
-                    "source": "WATCHLIST",
-                }
+            _merge_required_symbol(
+                symbols,
+                symbol=row.symbol,
+                market=row.market,
+                name=row.name,
+                source="WATCHLIST",
+                overwrite_source=False,
             )
+
+    _append_holdings(session, symbols)
 
     if not symbols:
         # Fallback so the pipeline still runs something useful
@@ -188,14 +238,47 @@ def fetch_market_data(state: AgentState) -> dict:
     return {"symbols": updated, "errors": errors}
 
 
-def persist_and_notify(state: AgentState, session: Session) -> dict:
-    """Persist horizon signals and send Discord notifications."""
+def persist_and_notify(state: AgentState) -> dict:
+    """Persist horizon signals and send Discord notifications.
+
+    Uses a fresh DB session so a long LLM run cannot leave a dead SSL connection.
+    """
     settings = get_settings()
+    last_error: Exception | None = None
+    signals_payload: list[dict[str, Any]] = []
+    for attempt in range(1, PERSIST_RETRY_ATTEMPTS + 1):
+        try:
+            with SessionLocal() as session:
+                signals_payload = _write_run_signals(state, session)
+            break
+        except OperationalError as exc:
+            last_error = exc
+            logger.warning(
+                "Failed to persist analysis (attempt %s/%s): %s",
+                attempt,
+                PERSIST_RETRY_ATTEMPTS,
+                exc,
+            )
+            if attempt < PERSIST_RETRY_ATTEMPTS:
+                time.sleep(PERSIST_RETRY_SLEEP_SECONDS * attempt)
+    else:
+        raise RuntimeError(
+            f"Failed to persist analysis after {PERSIST_RETRY_ATTEMPTS} attempts"
+        ) from last_error
+
+    notify_signals(signals_payload, min_confidence=settings.discord_min_confidence)
+    notify_recommendation_digest(signals_payload)
+    return {}
+
+
+def _write_run_signals(state: AgentState, session: Session) -> list[dict[str, Any]]:
+    """Insert this run's signals and mark the run completed."""
     run_id = state.get("run_id")
     if run_id is None:
-        return {"errors": list(state.get("errors") or []) + ["missing_run_id"]}
+        raise RuntimeError("missing_run_id")
 
     run = session.get(AnalysisRun, run_id)
+    session.execute(delete(Signal).where(Signal.run_id == run_id))
     signals_payload: list[dict[str, Any]] = []
 
     for item in state.get("symbols", []):
@@ -230,30 +313,42 @@ def persist_and_notify(state: AgentState, session: Session) -> dict:
             signals_payload.append(signal_data)
 
     if run is not None:
-        run.status = RunStatus.COMPLETED
+        run.status = RunStatus.COMPLETED.value
         run.finished_at = datetime.now(timezone.utc)
         if state.get("errors"):
             run.error_message = "; ".join(state["errors"])[:2000]
 
     session.commit()
-    notify_signals(signals_payload, min_confidence=settings.discord_min_confidence)
-    notify_recommendation_digest(signals_payload)
-    return {}
+    return signals_payload
 
 
-def build_graph(session: Session, mode: str = "watchlist"):
-    """Compile the analysis LangGraph with a bound DB session and mode."""
+def _mark_run_failed(run_id: int, error_message: str) -> None:
+    """Best-effort FAILED mark using a new connection."""
+    try:
+        with SessionLocal() as session:
+            run = session.get(AnalysisRun, run_id)
+            if run is None:
+                return
+            run.status = RunStatus.FAILED.value
+            run.finished_at = datetime.now(timezone.utc)
+            run.error_message = error_message[:2000]
+            session.commit()
+    except Exception:  # noqa: BLE001
+        logger.exception("Could not mark analysis_runs id=%s as FAILED", run_id)
+
+
+def build_graph(mode: str = "watchlist"):
+    """Compile the analysis LangGraph. DB nodes open short-lived sessions."""
 
     def _load(state: AgentState) -> dict:
-        if mode == "scan":
-            return load_scan_candidates(state, session)
-        return load_watchlist(state, session)
+        with SessionLocal() as session:
+            if mode == "scan":
+                return load_scan_candidates(state, session)
+            return load_watchlist(state, session)
 
     def _attach_previous(state: AgentState) -> dict:
-        return attach_previous_signals(state, session)
-
-    def _persist(state: AgentState) -> dict:
-        return persist_and_notify(state, session)
+        with SessionLocal() as session:
+            return attach_previous_signals(state, session)
 
     graph = StateGraph(AgentState)
     graph.add_node("load_candidates", _load)
@@ -264,7 +359,7 @@ def build_graph(session: Session, mode: str = "watchlist"):
     graph.add_node("fundamental_agent", fundamental_agent)
     graph.add_node("synthesize_signal", synthesize_signals)
     graph.add_node("portfolio_context", portfolio_context)
-    graph.add_node("persist_and_notify", _persist)
+    graph.add_node("persist_and_notify", persist_and_notify)
 
     graph.add_edge(START, "load_candidates")
     graph.add_edge("load_candidates", "attach_previous")
@@ -280,28 +375,27 @@ def build_graph(session: Session, mode: str = "watchlist"):
     return graph.compile()
 
 
-def run_analysis(session: Session, mode: str = "watchlist") -> AgentState:
+def run_analysis(mode: str = "watchlist") -> AgentState:
     """Create an analysis run row and execute the graph."""
     if mode not in {"watchlist", "scan"}:
         raise ValueError(f"Unsupported mode: {mode}")
 
-    run = AnalysisRun(
-        status=RunStatus.RUNNING,
-        mode=RunMode.SCAN if mode == "scan" else RunMode.WATCHLIST,
-    )
-    session.add(run)
-    session.commit()
-    session.refresh(run)
+    with SessionLocal() as session:
+        run = AnalysisRun(
+            status=RunStatus.RUNNING.value,
+            mode=RunMode.SCAN.value if mode == "scan" else RunMode.WATCHLIST.value,
+        )
+        session.add(run)
+        session.commit()
+        session.refresh(run)
+        run_id = run.id
 
-    app = build_graph(session, mode=mode)
+    app = build_graph(mode=mode)
     try:
         result = app.invoke(
-            {"run_id": run.id, "mode": mode, "symbols": [], "errors": []}
+            {"run_id": run_id, "mode": mode, "symbols": [], "errors": []}
         )
         return result  # type: ignore[return-value]
     except Exception as exc:  # noqa: BLE001
-        run.status = RunStatus.FAILED
-        run.finished_at = datetime.now(timezone.utc)
-        run.error_message = str(exc)[:2000]
-        session.commit()
+        _mark_run_failed(run_id, str(exc))
         raise

@@ -145,7 +145,7 @@ def _synthesize_one(
             news_summary=(item.get("news_insight") or {}).get("summary", ""),
             technical_summary=(item.get("technical_insight") or {}).get("summary", ""),
             fundamental_summary=(item.get("fundamental_insight") or {}).get("summary", ""),
-            source=source if source in {"WATCHLIST", "SCAN"} else "WATCHLIST",  # type: ignore[arg-type]
+            source=source if source in {"WATCHLIST", "SCAN", "PORTFOLIO"} else "WATCHLIST",  # type: ignore[arg-type]
             short_score=item.get("short_score"),
             long_score=item.get("long_score"),
             previous_action=str(previous["action"]) if previous else None,
@@ -167,7 +167,7 @@ def _synthesize_one(
             news_summary=(item.get("news_insight") or {}).get("summary", ""),
             technical_summary=(item.get("technical_insight") or {}).get("summary", ""),
             fundamental_summary=(item.get("fundamental_insight") or {}).get("summary", ""),
-            source=source if source in {"WATCHLIST", "SCAN"} else "WATCHLIST",  # type: ignore[arg-type]
+            source=source if source in {"WATCHLIST", "SCAN", "PORTFOLIO"} else "WATCHLIST",  # type: ignore[arg-type]
             short_score=item.get("short_score"),
             long_score=item.get("long_score"),
             previous_action=str(previous["action"]) if previous else None,

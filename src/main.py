@@ -5,10 +5,12 @@ from __future__ import annotations
 import argparse
 import logging
 import sys
+import threading
 
 from apscheduler.schedulers.blocking import BlockingScheduler
 
 from src.config import get_settings
+from src.db.requests import claim_pending_request, finish_request, reset_stale_running
 from src.db.seed import seed_watchlist
 from src.db.session import SessionLocal
 from src.graph.workflow import run_analysis
@@ -18,6 +20,9 @@ logging.basicConfig(
     format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
 )
 logger = logging.getLogger("stock-agent")
+
+REQUEST_POLL_SECONDS = 15
+_run_lock = threading.Lock()
 
 
 def cmd_seed() -> int:
@@ -34,21 +39,20 @@ def _run(mode: str) -> int:
         logger.error("OPENAI_API_KEY is required")
         return 1
 
-    with SessionLocal() as session:
-        result = run_analysis(session, mode=mode)
-        count = len(result.get("symbols") or [])
-        signal_count = sum(len(s.get("signals") or []) for s in (result.get("symbols") or []))
-        errors = result.get("errors") or []
-        logger.info(
-            "Analysis finished mode=%s symbols=%s signals=%s errors=%s",
-            mode,
-            count,
-            signal_count,
-            len(errors),
-        )
-        if errors:
-            for err in errors[:10]:
-                logger.warning("%s", err)
+    result = run_analysis(mode=mode)
+    count = len(result.get("symbols") or [])
+    signal_count = sum(len(s.get("signals") or []) for s in (result.get("symbols") or []))
+    errors = result.get("errors") or []
+    logger.info(
+        "Analysis finished mode=%s symbols=%s signals=%s errors=%s",
+        mode,
+        count,
+        signal_count,
+        len(errors),
+    )
+    if errors:
+        for err in errors[:10]:
+            logger.warning("%s", err)
     return 0
 
 
@@ -73,7 +77,7 @@ def cmd_schedule() -> int:
     schedule_mode = (settings.schedule_mode or "scan").lower()
     scheduler = BlockingScheduler()
 
-    def job() -> None:
+    def run_scheduled() -> None:
         logger.info("Scheduled analysis starting (schedule_mode=%s)", schedule_mode)
         try:
             if schedule_mode in {"watchlist", "both"}:
@@ -83,8 +87,50 @@ def cmd_schedule() -> int:
         except Exception:  # noqa: BLE001
             logger.exception("Scheduled analysis failed")
 
+    def job() -> None:
+        with _run_lock:
+            run_scheduled()
+
+    def poll_web_requests() -> None:
+        if not _run_lock.acquire(blocking=False):
+            return
+        try:
+            with SessionLocal() as session:
+                request = claim_pending_request(session)
+            if request is None:
+                return
+            mode = (request.mode or schedule_mode or "scan").lower()
+            if mode not in {"watchlist", "scan"}:
+                mode = "scan"
+            logger.info("Web analysis request %s starting (mode=%s)", request.id, mode)
+            ok = True
+            error_message = None
+            try:
+                _run(mode)
+            except Exception as exc:  # noqa: BLE001
+                ok = False
+                error_message = str(exc)
+                logger.exception("Web analysis request %s failed", request.id)
+            with SessionLocal() as session:
+                finish_request(session, request.id, ok=ok, error_message=error_message)
+        finally:
+            _run_lock.release()
+
+    with SessionLocal() as session:
+        reset_stale_running(session)
+
     scheduler.add_job(job, "interval", minutes=interval, id="analysis", next_run_time=None)
-    logger.info("Scheduler started (every %s minutes). Running first job now.", interval)
+    scheduler.add_job(
+        poll_web_requests,
+        "interval",
+        seconds=REQUEST_POLL_SECONDS,
+        id="web-requests",
+    )
+    logger.info(
+        "Scheduler started (every %s minutes, web poll every %ss). Running first job now.",
+        interval,
+        REQUEST_POLL_SECONDS,
+    )
     job()
     try:
         scheduler.start()

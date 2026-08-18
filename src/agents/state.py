@@ -39,7 +39,7 @@ class TradeSignal(BaseModel):
     technical_summary: str = ""
     fundamental_summary: str = ""
     portfolio_note: str = ""
-    source: Literal["WATCHLIST", "SCAN"] = "WATCHLIST"
+    source: Literal["WATCHLIST", "SCAN", "PORTFOLIO"] = "WATCHLIST"
     short_score: Optional[float] = None
     long_score: Optional[float] = None
     previous_action: Optional[str] = None
