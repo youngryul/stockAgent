@@ -4,16 +4,21 @@ from __future__ import annotations
 
 from typing import Any, Literal, Optional, TypedDict
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class AgentInsight(BaseModel):
     """Structured opinion from a specialist agent."""
 
+    model_config = ConfigDict(extra="forbid")
+
     bias: Literal["bullish", "bearish", "neutral"] = "neutral"
     confidence: float = Field(ge=0.0, le=1.0, default=0.5)
     summary: str = Field(default="", description="Short Korean summary")
-    details: dict[str, Any] = Field(default_factory=dict)
+    key_points: list[str] = Field(
+        default_factory=list,
+        description="Optional extra Korean bullets. Do not use a free-form object.",
+    )
 
 
 class TradeSignal(BaseModel):

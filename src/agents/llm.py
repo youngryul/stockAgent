@@ -31,7 +31,7 @@ def get_llm(temperature: float = 0.2) -> ChatOpenAI:
 
 def structured_invoke(system: str, user: str, schema: type[T]) -> T:
     """Invoke the LLM with structured output bound to a Pydantic schema."""
-    llm = get_llm().with_structured_output(schema)
+    llm = get_llm().with_structured_output(schema, method="json_schema", strict=True)
     result = llm.invoke(
         [
             {"role": "system", "content": system},

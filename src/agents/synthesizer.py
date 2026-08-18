@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from src.agents.llm import KOREAN_OUTPUT_RULE, structured_invoke
 from src.agents.state import AgentState, TradeSignal
@@ -12,8 +12,12 @@ from src.market.universe import resolve_symbol_name
 
 
 class _SynthOut(BaseModel):
-    action: str = Field(description="BUY, SELL, or HOLD")
-    confidence: float
+    """OpenAI json_schema-compatible synthesizer output (no free-form objects)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    action: Literal["BUY", "SELL", "HOLD"] = Field(description="BUY, SELL, or HOLD")
+    confidence: float = Field(ge=0.0, le=1.0)
     entry_hint: float | None = None
     stop_loss: float | None = None
     take_profit: float | None = None
