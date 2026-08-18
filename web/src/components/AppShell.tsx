@@ -88,14 +88,19 @@ export function AppShell({ email, children }: AppShellProps): ReactElement {
 export function PageHeading({
   title,
   subtitle,
+  action,
 }: {
   title: string;
   subtitle?: string;
+  action?: ReactNode;
 }): ReactElement {
   return (
-    <div className="mb-6">
-      <h1 className="text-2xl font-semibold tracking-tight md:text-3xl">{title}</h1>
-      {subtitle ? <p className="mt-1 text-sm text-hold">{subtitle}</p> : null}
+    <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
+      <div>
+        <h1 className="text-2xl font-semibold tracking-tight md:text-3xl">{title}</h1>
+        {subtitle ? <p className="mt-1 text-sm text-hold">{subtitle}</p> : null}
+      </div>
+      {action ? <div className="shrink-0 pt-1">{action}</div> : null}
     </div>
   );
 }

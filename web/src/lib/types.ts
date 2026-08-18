@@ -25,7 +25,14 @@ export type Signal = {
   technicalSummary: string;
   fundamentalSummary: string;
   portfolioNote: string;
+  isHeld: boolean;
+  changeSummary: string;
+  previousAction: string | null;
+  previousConfidence: number | null;
+  previousAt: string | null;
   createdAt: string | null;
+  runId: number;
+  scannedAt: string | null;
 };
 
 export type PortfolioPosition = {
@@ -36,7 +43,19 @@ export type PortfolioPosition = {
   quantity: number;
   avgCost: number;
   costAmount: number;
+  stopLoss: number | null;
+  takeProfit: number | null;
   updatedAt: string | null;
+};
+
+export type KisSavedAccount = {
+  accountKey: string;
+  accountLabel: string;
+  environment: "real" | "paper";
+};
+
+export type KisCredentialStatus = {
+  accounts: KisSavedAccount[];
 };
 
 export type PortfolioSnapshot = {

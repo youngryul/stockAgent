@@ -16,6 +16,7 @@ from src.agents.state import AgentState
 from src.agents.synthesizer import synthesize_signals
 from src.agents.technical import technical_agent
 from src.config import get_settings
+from src.db.history import load_latest_completed_signals
 from src.db.models import (
     AnalysisRun,
     RunMode,
@@ -121,6 +122,30 @@ def load_scan_candidates(state: AgentState, session: Session) -> dict:
     }
 
 
+def attach_previous_signals(state: AgentState, session: Session) -> dict:
+    """Attach the latest completed signal per symbol and horizon for continuity."""
+    symbols = list(state.get("symbols") or [])
+    tickers = [str(item.get("symbol") or "") for item in symbols if item.get("symbol")]
+    previous = load_latest_completed_signals(
+        session,
+        tickers,
+        exclude_run_id=state.get("run_id"),
+    )
+    updated: list[dict[str, Any]] = []
+    for item in symbols:
+        symbol = str(item.get("symbol") or "")
+        updated.append(
+            {
+                **item,
+                "previous_by_horizon": {
+                    "SHORT": previous.get((symbol, "SHORT")),
+                    "LONG": previous.get((symbol, "LONG")),
+                },
+            }
+        )
+    return {"symbols": updated}
+
+
 def fetch_market_data(state: AgentState) -> dict:
     """Fetch OHLCV features, fundamentals, and news for each symbol."""
     updated: list[dict[str, Any]] = []
@@ -224,11 +249,15 @@ def build_graph(session: Session, mode: str = "watchlist"):
             return load_scan_candidates(state, session)
         return load_watchlist(state, session)
 
+    def _attach_previous(state: AgentState) -> dict:
+        return attach_previous_signals(state, session)
+
     def _persist(state: AgentState) -> dict:
         return persist_and_notify(state, session)
 
     graph = StateGraph(AgentState)
     graph.add_node("load_candidates", _load)
+    graph.add_node("attach_previous", _attach_previous)
     graph.add_node("fetch_market_data", fetch_market_data)
     graph.add_node("news_agent", news_agent)
     graph.add_node("technical_agent", technical_agent)
@@ -238,7 +267,8 @@ def build_graph(session: Session, mode: str = "watchlist"):
     graph.add_node("persist_and_notify", _persist)
 
     graph.add_edge(START, "load_candidates")
-    graph.add_edge("load_candidates", "fetch_market_data")
+    graph.add_edge("load_candidates", "attach_previous")
+    graph.add_edge("attach_previous", "fetch_market_data")
     graph.add_edge("fetch_market_data", "news_agent")
     graph.add_edge("news_agent", "technical_agent")
     graph.add_edge("technical_agent", "fundamental_agent")

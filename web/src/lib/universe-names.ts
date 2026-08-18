@@ -105,6 +105,13 @@ const MARKET_BY_SYMBOL: Record<string, "KR" | "US"> = Object.fromEntries(
   UNIVERSE.map((item) => [item.symbol, item.market]),
 );
 
+const KR_CODE_BY_DIGITS: Record<string, string> = Object.fromEntries(
+  UNIVERSE.filter((item) => item.market === "KR").map((item) => [
+    item.symbol.replace(/\.(KS|KQ)$/i, ""),
+    item.symbol,
+  ]),
+);
+
 /**
  * Look up the curated display name for a ticker.
  * @param symbol - yfinance ticker
@@ -119,4 +126,13 @@ export function lookupUniverseName(symbol: string): string {
  */
 export function lookupUniverseMarket(symbol: string): "KR" | "US" | "" {
   return MARKET_BY_SYMBOL[symbol] || "";
+}
+
+/**
+ * Map a 6-digit KRX code to the yfinance ticker used in this app.
+ * @param pdno - Korean stock product number from KIS
+ */
+export function krSymbolFromPdno(pdno: string): string {
+  const code = pdno.replace(/\D/g, "").padStart(6, "0");
+  return KR_CODE_BY_DIGITS[code] || `${code}.KS`;
 }

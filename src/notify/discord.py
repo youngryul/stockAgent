@@ -88,6 +88,7 @@ def format_embed(signal: dict[str, Any]) -> dict[str, Any]:
 
     description_parts = [
         signal.get("rationale") or "",
+        f"**연속성:** {signal.get('change_summary') or '-'}",
         f"**뉴스:** {signal.get('news_summary') or '-'}",
         f"**기술적 분석:** {signal.get('technical_summary') or '-'}",
         f"**펀더멘털:** {signal.get('fundamental_summary') or '-'}",

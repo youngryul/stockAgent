@@ -1,20 +1,23 @@
 "use client";
 
-import { useMemo, useState, type ReactElement } from "react";
+import { useMemo, useTransition, type ReactElement } from "react";
+import { useRouter } from "next/navigation";
 
 import { PageHeading } from "@/components/AppShell";
 import { SignalCard } from "@/components/SignalCard";
-import { formatDateTime } from "@/lib/format";
+import { HIGH_CONVICTION_MIN, SOURCE_LABELS } from "@/lib/constants";
+import {
+  actionLabel,
+  displaySymbol,
+  formatDate,
+  formatDateTime,
+  formatPercent,
+  formatTime,
+  horizonLabel,
+  marketLabel,
+} from "@/lib/format";
+import { groupSignalsBySymbol, type SymbolGroup } from "@/lib/signal-groups";
 import type { AnalysisRun, Signal } from "@/lib/types";
-
-type FilterId = "ALL" | "SHORT" | "LONG" | "BUY";
-
-const FILTERS: { id: FilterId; label: string }[] = [
-  { id: "ALL", label: "전체" },
-  { id: "SHORT", label: "단타" },
-  { id: "LONG", label: "장기" },
-  { id: "BUY", label: "매수만" },
-];
 
 type DashboardClientProps = {
   run: AnalysisRun | null;
@@ -27,33 +30,33 @@ export function DashboardClient({
   signals,
   loadError,
 }: DashboardClientProps): ReactElement {
-  const [filter, setFilter] = useState<FilterId>("ALL");
+  const router = useRouter();
+  const [isRefreshing, startRefresh] = useTransition();
 
   const shortBuys = signals.filter((item) => item.action === "BUY" && item.horizon === "SHORT");
   const longBuys = signals.filter((item) => item.action === "BUY" && item.horizon === "LONG");
-
-  const visible = useMemo(() => {
-    return signals.filter((item) => {
-      if (filter === "SHORT") {
-        return item.horizon === "SHORT";
-      }
-      if (filter === "LONG") {
-        return item.horizon === "LONG";
-      }
-      if (filter === "BUY") {
-        return item.action === "BUY";
-      }
-      return true;
-    });
-  }, [filter, signals]);
+  const groups = useMemo(() => groupSignalsBySymbol(signals), [signals]);
 
   const subtitle = run
-    ? `최근 분석 ${formatDateTime(run.finishedAt || run.startedAt)} · ${run.mode === "scan" ? "유니버스 스캔" : "관심종목"}`
-    : "아직 완료된 분석이 없습니다. Docker 에이전트가 DB에 시그널을 쌓으면 여기에 표시됩니다.";
+    ? `${formatDate()} · 오늘 완료된 분석 전부 · 마지막 ${formatDateTime(run.finishedAt || run.startedAt)}`
+    : `${formatDate()} · 오늘 완료된 분석이 없습니다. Docker 에이전트가 시그널을 쌓으면 여기에 표시됩니다.`;
 
   return (
     <>
-      <PageHeading title="오늘의 분석" subtitle={subtitle} />
+      <PageHeading
+        title="오늘의 분석"
+        subtitle={subtitle}
+        action={
+          <button
+            type="button"
+            onClick={() => startRefresh(() => router.refresh())}
+            disabled={isRefreshing}
+            className="rounded-full border border-line px-4 py-1.5 text-sm text-hold hover:border-slate-400 hover:text-slate-100 disabled:opacity-60"
+          >
+            {isRefreshing ? "불러오는 중" : "새로고침"}
+          </button>
+        }
+      />
       {loadError ? (
         <p className="mb-5 rounded-xl border border-sell/40 bg-sell/10 px-4 py-3 text-sm text-sell">
           {loadError} — Supabase에 테이블/마이그레이션이 없으면 이 오류가 납니다. Docker 에이전트의
@@ -66,35 +69,85 @@ export function DashboardClient({
         <SummaryChip label="장기 매수" value={`${longBuys.length}`} accent="gold" />
       </section>
 
-      <div className="mb-5 flex flex-wrap gap-2">
-        {FILTERS.map((item) => (
-          <button
-            key={item.id}
-            type="button"
-            onClick={() => setFilter(item.id)}
-            className={
-              filter === item.id
-                ? "rounded-full bg-slate-100 px-3 py-1 text-sm font-medium text-ink-950"
-                : "rounded-full border border-line px-3 py-1 text-sm text-hold hover:text-slate-100"
-            }
-          >
-            {item.label}
-          </button>
-        ))}
-      </div>
-
-      {visible.length === 0 ? (
+      {signals.length === 0 ? (
         <p className="rounded-2xl border border-dashed border-line px-5 py-12 text-center text-hold">
-          표시할 시그널이 없습니다.
+          오늘 표시할 시그널이 없습니다.
         </p>
       ) : (
-        <div className="grid gap-4">
-          {visible.map((signal) => (
-            <SignalCard key={signal.id} signal={signal} />
+        <div className="grid gap-3">
+          {groups.map((group) => (
+            <SymbolRow key={group.symbol} group={group} />
           ))}
         </div>
       )}
     </>
+  );
+}
+
+function SymbolRow({ group }: { group: SymbolGroup }): ReactElement {
+  const latest = group.scans[0];
+  const latestSignals = latest?.signals || [];
+  const highConviction = latestSignals.filter(
+    (item) =>
+      (item.action === "BUY" || item.action === "SELL") && item.confidence >= HIGH_CONVICTION_MIN,
+  );
+
+  return (
+    <details className="group/symbol rounded-2xl border border-line bg-ink-800/70 open:bg-ink-800">
+      <summary className="flex cursor-pointer list-none flex-wrap items-center justify-between gap-3 px-5 py-4 [&::-webkit-details-marker]:hidden">
+        <div>
+          <h2 className="text-lg font-semibold tracking-tight">
+            {displaySymbol(group.symbol, group.name)}
+          </h2>
+          <p className="mt-1 text-xs text-hold">
+            {marketLabel(group.market)} · 오늘 {group.scans.length}회 스캔
+            {latest?.scannedAt ? ` · 최근 ${formatTime(latest.scannedAt)}` : ""}
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-1.5">
+          {highConviction.map((item) => (
+            <span
+              key={`${item.id}-badge`}
+              className={
+                item.action === "BUY"
+                  ? "rounded-full border border-buy/40 bg-buy/10 px-2 py-0.5 text-xs text-buy"
+                  : "rounded-full border border-sell/40 bg-sell/10 px-2 py-0.5 text-xs text-sell"
+              }
+            >
+              {horizonLabel(item.horizon)} {actionLabel(item.action)} {formatPercent(item.confidence)}
+            </span>
+          ))}
+          <span
+            aria-hidden
+            className="ml-1 inline-block text-hold transition-transform group-open/symbol:rotate-180"
+          >
+            ▾
+          </span>
+        </div>
+      </summary>
+      <div className="space-y-5 border-t border-line/70 px-5 py-4">
+        {group.scans.map((scan, index) => (
+          <div key={scan.runId} className="space-y-3">
+            <p className="flex items-center gap-2 text-sm text-gold">
+              <span className="font-medium">{formatTime(scan.scannedAt)} 스캔</span>
+              {index === 0 ? (
+                <span className="rounded-full border border-gold/40 px-2 py-0.5 text-[11px] text-gold">
+                  최근
+                </span>
+              ) : null}
+              <span className="text-xs text-hold">
+                {SOURCE_LABELS[scan.signals[0]?.source || ""] || scan.signals[0]?.source || ""}
+              </span>
+            </p>
+            <div className="grid gap-3">
+              {scan.signals.map((signal) => (
+                <SignalCard key={signal.id} signal={signal} hideSymbol />
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </details>
   );
 }
 

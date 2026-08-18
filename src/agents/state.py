@@ -42,6 +42,10 @@ class TradeSignal(BaseModel):
     source: Literal["WATCHLIST", "SCAN"] = "WATCHLIST"
     short_score: Optional[float] = None
     long_score: Optional[float] = None
+    previous_action: Optional[str] = None
+    previous_confidence: Optional[float] = None
+    previous_at: Optional[str] = None
+    change_summary: str = ""
 
 
 class SymbolBundle(TypedDict, total=False):
@@ -61,6 +65,7 @@ class SymbolBundle(TypedDict, total=False):
     signals: list[dict[str, Any]]
     signal: dict[str, Any]
     portfolio: dict[str, Any]
+    previous_by_horizon: dict[str, Any]
 
 
 class AgentState(TypedDict, total=False):

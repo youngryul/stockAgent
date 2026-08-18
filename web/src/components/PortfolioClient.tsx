@@ -3,8 +3,9 @@
 import { useEffect, useMemo, useState, type FormEvent, type ReactElement } from "react";
 
 import { PageHeading } from "@/components/AppShell";
-import { displaySymbol, formatMoney, formatNumber } from "@/lib/format";
-import type { PortfolioPosition, PortfolioSnapshot } from "@/lib/types";
+import { HoldingsTable } from "@/components/HoldingsTable";
+import { formatMoney } from "@/lib/format";
+import type { KisCredentialStatus, PortfolioPosition, PortfolioSnapshot } from "@/lib/types";
 import { lookupUniverseMarket, lookupUniverseName, UNIVERSE } from "@/lib/universe-names";
 
 const EMPTY_FORM = {
@@ -17,8 +18,10 @@ const EMPTY_FORM = {
 
 export function PortfolioClient({
   initial,
+  kisStatus,
 }: {
   initial: PortfolioSnapshot;
+  kisStatus: KisCredentialStatus;
 }): ReactElement {
   const [data, setData] = useState(initial);
   const [cashInput, setCashInput] = useState(String(initial.cashAmount || ""));
@@ -26,6 +29,19 @@ export function PortfolioClient({
   const [editingId, setEditingId] = useState<number | null>(null);
   const [error, setError] = useState(initial.loadError || "");
   const [pending, setPending] = useState(false);
+  const [kisAppKey, setKisAppKey] = useState("");
+  const [kisAppSecret, setKisAppSecret] = useState("");
+  const [kisAccount, setKisAccount] = useState("");
+  const [kisEnvironment, setKisEnvironment] = useState<"real" | "paper">(
+    kisStatus.accounts[0]?.environment === "paper" ? "paper" : "real",
+  );
+  const [kisMessage, setKisMessage] = useState("");
+  const [savedKis, setSavedKis] = useState(kisStatus);
+
+  const typedAccountKey = kisAccount.replace(/\D/g, "").slice(0, 10);
+  const savedForTypedAccount = savedKis.accounts.find(
+    (item) => item.accountKey === typedAccountKey && typedAccountKey.length === 10,
+  );
 
   const krHoldings = data.positions
     .filter((item) => item.market === "KR")
@@ -58,6 +74,76 @@ export function PortfolioClient({
       name: name || current.name,
       market,
     }));
+  }
+
+  async function importFromKis(useSaved = false, accountValue = kisAccount): Promise<void> {
+    setPending(true);
+    setError("");
+    setKisMessage("");
+    try {
+      const response = await fetch("/api/portfolio/kis", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(
+          useSaved
+            ? { useSaved: true, account: accountValue, environment: kisEnvironment }
+            : {
+                appKey: kisAppKey,
+                appSecret: kisAppSecret,
+                account: accountValue,
+                environment: kisEnvironment,
+              },
+        ),
+      });
+      const payload = (await response.json()) as PortfolioSnapshot & {
+        error?: string;
+        imported?: { krCount: number; usCount: number | null };
+        kis?: KisCredentialStatus;
+      };
+      if (!response.ok) {
+        setError(payload.error || "한국투자 잔고를 가져오지 못했습니다.");
+        return;
+      }
+      setData(payload);
+      if (payload.kis) {
+        setSavedKis(payload.kis);
+      }
+      setKisAppSecret("");
+      const usText =
+        payload.imported?.usCount === null
+          ? "미국 잔고는 조회되지 않아 기존 미국 종목은 그대로 두었습니다."
+          : `미국 ${payload.imported?.usCount ?? 0}종목`;
+      setKisMessage(
+        `기존 보유는 유지하고, 한국 ${payload.imported?.krCount ?? 0}종목${
+          payload.imported?.usCount === null ? "" : `, ${usText}`
+        }을 합쳤습니다.`,
+      );
+    } finally {
+      setPending(false);
+    }
+  }
+
+  async function forgetKis(): Promise<void> {
+    setPending(true);
+    setError("");
+    try {
+      const response = await fetch(
+        kisAccount
+          ? `/api/portfolio/kis?account=${encodeURIComponent(kisAccount)}`
+          : "/api/portfolio/kis",
+        { method: "DELETE" },
+      );
+      if (!response.ok) {
+        const payload = (await response.json()) as { error?: string };
+        setError(payload.error || "저장된 앱키를 지우지 못했습니다.");
+        return;
+      }
+      const payload = (await response.json()) as KisCredentialStatus;
+      setSavedKis(payload);
+      setKisMessage("저장된 앱키를 삭제했습니다.");
+    } finally {
+      setPending(false);
+    }
   }
 
   async function saveCash(event: FormEvent): Promise<void> {
@@ -151,6 +237,9 @@ export function PortfolioClient({
       quantity: String(position.quantity),
       avgCost: String(position.avgCost),
     });
+    requestAnimationFrame(() => {
+      document.getElementById("position-form")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
   }
 
   const costPreview =
@@ -162,13 +251,143 @@ export function PortfolioClient({
     <>
       <PageHeading
         title="보유종목"
-        subtitle="현금과 보유 수량·단가를 입력하면 다음 분석에 반영됩니다. 주문은 실행하지 않습니다."
+        subtitle={`${data.positions.length}종목 · 한국투자 잔고를 가져오거나 직접 입력하면 분석 카드에 반영됩니다.`}
       />
       <section className="mb-6 grid gap-3 sm:grid-cols-3">
         <StatCard label="현금 잔고" value={formatMoney(data.cashAmount, "KR")} />
         <StatCard label="한국 매수금액" value={formatMoney(krHoldings, "KR")} />
         <StatCard label="미국 매수금액" value={formatMoney(usHoldings, "US")} />
       </section>
+
+      {error ? <p className="mb-4 text-sm text-sell">{error}</p> : null}
+
+      <section className="mb-8">
+        <h2 className="mb-3 text-sm font-medium text-gold">보유 목록</h2>
+        <HoldingsTable
+          positions={data.positions}
+          onEdit={startEdit}
+          onRemove={(id) => void removePosition(id)}
+        />
+      </section>
+
+      <form
+        onSubmit={(event) => {
+          event.preventDefault();
+          void importFromKis(false);
+        }}
+        className="mb-8 rounded-2xl border border-line bg-ink-800/70 p-5"
+      >
+        <h2 className="mb-1 text-sm font-medium text-gold">한국투자 잔고 가져오기</h2>
+        <p className="mb-4 text-xs text-hold">
+          가져온 종목은 기존 보유 목록에 합쳐집니다. 저장된 키가 있으면 계좌번호만 넣고 불러올 수
+          있습니다.
+        </p>
+        {savedKis.accounts.length > 0 ? (
+          <div className="mb-4 flex flex-wrap gap-2">
+            {savedKis.accounts.map((item) => (
+              <button
+                key={`${item.accountKey}-${item.environment}`}
+                type="button"
+                disabled={pending}
+                onClick={() => {
+                  setKisAccount(item.accountLabel);
+                  setKisEnvironment(item.environment);
+                  void importFromKis(true, item.accountLabel);
+                }}
+                className="rounded-full border border-gold/40 bg-gold/10 px-3 py-1 text-xs text-gold disabled:opacity-50"
+              >
+                {item.accountLabel} 키로 가져오기
+              </button>
+            ))}
+          </div>
+        ) : null}
+        <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
+          <label>
+            <span className="mb-1 block text-xs text-hold">환경</span>
+            <select
+              value={kisEnvironment}
+              onChange={(event) =>
+                setKisEnvironment(event.target.value === "paper" ? "paper" : "real")
+              }
+              className="w-full rounded-xl border border-line bg-ink-950 px-3 py-2 outline-none ring-gold/40 focus:ring-2"
+            >
+              <option value="real">실전</option>
+              <option value="paper">모의</option>
+            </select>
+          </label>
+          <label>
+            <span className="mb-1 block text-xs text-hold">계좌번호</span>
+            <input
+              value={kisAccount}
+              onChange={(event) => setKisAccount(event.target.value)}
+              placeholder="12345678-01"
+              autoComplete="off"
+              className="w-full rounded-xl border border-line bg-ink-950 px-3 py-2 font-mono outline-none ring-gold/40 focus:ring-2"
+              required
+            />
+          </label>
+          <label>
+            <span className="mb-1 block text-xs text-hold">앱키</span>
+            <input
+              value={kisAppKey}
+              onChange={(event) => setKisAppKey(event.target.value)}
+              autoComplete="off"
+              className="w-full rounded-xl border border-line bg-ink-950 px-3 py-2 outline-none ring-gold/40 focus:ring-2"
+              required={!savedForTypedAccount}
+            />
+          </label>
+          <label>
+            <span className="mb-1 block text-xs text-hold">앱시크릿</span>
+            <input
+              type="password"
+              value={kisAppSecret}
+              onChange={(event) => setKisAppSecret(event.target.value)}
+              autoComplete="off"
+              className="w-full rounded-xl border border-line bg-ink-950 px-3 py-2 outline-none ring-gold/40 focus:ring-2"
+              required={!savedForTypedAccount}
+            />
+          </label>
+        </div>
+        <div className="mt-4 flex flex-wrap items-center gap-3">
+          <button
+            type="submit"
+            disabled={pending}
+            className="rounded-xl bg-gold px-4 py-2 font-medium text-ink-950 disabled:opacity-50"
+          >
+            {pending ? "가져오는 중" : "잔고 가져와서 저장"}
+          </button>
+          {savedForTypedAccount ? (
+            <>
+              <button
+                type="button"
+                disabled={pending}
+                onClick={() => void importFromKis(true)}
+                className="rounded-xl border border-gold/40 px-4 py-2 text-sm text-gold disabled:opacity-50"
+              >
+                이 계좌 저장된 키로 가져오기
+              </button>
+              <button
+                type="button"
+                disabled={pending}
+                onClick={() => void forgetKis()}
+                className="rounded-xl border border-line px-4 py-2 text-sm text-hold disabled:opacity-50"
+              >
+                이 계좌 저장된 키 삭제
+              </button>
+            </>
+          ) : savedKis.accounts.length > 0 ? (
+            <button
+              type="button"
+              disabled={pending}
+              onClick={() => void forgetKis()}
+              className="rounded-xl border border-line px-4 py-2 text-sm text-hold disabled:opacity-50"
+            >
+              저장된 키 삭제
+            </button>
+          ) : null}
+          {kisMessage ? <p className="text-sm text-buy">{kisMessage}</p> : null}
+        </div>
+      </form>
 
       <form
         onSubmit={(event) => void saveCash(event)}
@@ -198,6 +417,7 @@ export function PortfolioClient({
       </form>
 
       <form
+        id="position-form"
         onSubmit={(event) => void savePosition(event)}
         className="mb-8 rounded-2xl border border-line bg-ink-800/70 p-5"
       >
@@ -329,66 +549,6 @@ export function PortfolioClient({
           </ul>
         ) : null}
       </form>
-
-      {error ? <p className="mb-4 text-sm text-sell">{error}</p> : null}
-
-      <div className="overflow-x-auto rounded-2xl border border-line">
-        <table className="w-full min-w-[720px] text-left text-sm">
-          <thead className="bg-ink-800 text-xs uppercase tracking-wide text-hold">
-            <tr>
-              <th className="px-4 py-3 font-medium">종목</th>
-              <th className="px-4 py-3 font-medium">시장</th>
-              <th className="px-4 py-3 font-medium">수량</th>
-              <th className="px-4 py-3 font-medium">평균단가</th>
-              <th className="px-4 py-3 font-medium">매수금액</th>
-              <th className="px-4 py-3 font-medium" />
-            </tr>
-          </thead>
-          <tbody>
-            {data.positions.length === 0 ? (
-              <tr>
-                <td colSpan={6} className="px-4 py-10 text-center text-hold">
-                  아직 보유 종목이 없습니다.
-                </td>
-              </tr>
-            ) : (
-              data.positions.map((position) => (
-                <tr key={position.id} className="border-t border-line/70">
-                  <td className="px-4 py-3 font-medium">
-                    {displaySymbol(position.symbol, position.name)}
-                  </td>
-                  <td className="px-4 py-3 text-hold">
-                    {position.market === "US" ? "미국" : "한국"}
-                  </td>
-                  <td className="px-4 py-3 font-mono num">{formatNumber(position.quantity)}</td>
-                  <td className="px-4 py-3 font-mono num">
-                    {formatMoney(position.avgCost, position.market)}
-                  </td>
-                  <td className="px-4 py-3 font-mono num">
-                    {formatMoney(position.costAmount, position.market)}
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    <button
-                      type="button"
-                      onClick={() => startEdit(position)}
-                      className="mr-2 text-hold hover:text-slate-100"
-                    >
-                      수정
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => void removePosition(position.id)}
-                      className="text-sell/80 hover:text-sell"
-                    >
-                      삭제
-                    </button>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
     </>
   );
 }

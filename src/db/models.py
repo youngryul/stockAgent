@@ -135,6 +135,8 @@ class PortfolioPosition(Base):
     name: Mapped[str] = mapped_column(String(128), nullable=False, default="")
     quantity: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     avg_cost: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    stop_loss: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    take_profit: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
     )

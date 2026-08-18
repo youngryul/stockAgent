@@ -57,6 +57,8 @@ CREATE TABLE IF NOT EXISTS portfolio_positions (
     name VARCHAR(128) NOT NULL DEFAULT '',
     quantity DOUBLE PRECISION NOT NULL DEFAULT 0,
     avg_cost DOUBLE PRECISION NOT NULL DEFAULT 0,
+    stop_loss DOUBLE PRECISION,
+    take_profit DOUBLE PRECISION,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     CONSTRAINT uq_portfolio_user_symbol UNIQUE (user_id, symbol)
 );
@@ -69,12 +71,46 @@ CREATE TABLE IF NOT EXISTS portfolio_cash (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+ALTER TABLE portfolio_positions ADD COLUMN IF NOT EXISTS stop_loss DOUBLE PRECISION;
+ALTER TABLE portfolio_positions ADD COLUMN IF NOT EXISTS take_profit DOUBLE PRECISION;
+
+CREATE TABLE IF NOT EXISTS kis_credentials (
+    user_id UUID NOT NULL REFERENCES auth.users (id) ON DELETE CASCADE,
+    account_key VARCHAR(16) NOT NULL DEFAULT '',
+    environment VARCHAR(8) NOT NULL DEFAULT 'real',
+    account_hint VARCHAR(16) NOT NULL DEFAULT '',
+    ciphertext TEXT NOT NULL,
+    nonce TEXT NOT NULL,
+    auth_tag TEXT NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT kis_credentials_pkey PRIMARY KEY (user_id, account_key)
+);
+
+ALTER TABLE kis_credentials ADD COLUMN IF NOT EXISTS account_key VARCHAR(16) NOT NULL DEFAULT '';
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conrelid = 'public.kis_credentials'::regclass
+          AND contype = 'p'
+          AND pg_get_constraintdef(oid) LIKE '%user_id%'
+          AND pg_get_constraintdef(oid) NOT LIKE '%account_key%'
+    ) THEN
+        ALTER TABLE kis_credentials DROP CONSTRAINT kis_credentials_pkey;
+        ALTER TABLE kis_credentials ADD CONSTRAINT kis_credentials_pkey PRIMARY KEY (user_id, account_key);
+    END IF;
+END $$;
+
+UPDATE alembic_version SET version_num = '0006_kis_accounts'
+WHERE version_num IN ('0004_user_portfolio', '0005_kis_and_targets');
 INSERT INTO alembic_version (version_num)
-VALUES ('0004_user_portfolio')
-ON CONFLICT (version_num) DO NOTHING;
+SELECT '0006_kis_accounts'
+WHERE NOT EXISTS (SELECT 1 FROM alembic_version);
 
 ALTER TABLE portfolio_cash ENABLE ROW LEVEL SECURITY;
 ALTER TABLE portfolio_positions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE kis_credentials ENABLE ROW LEVEL SECURITY;
 ALTER TABLE signals ENABLE ROW LEVEL SECURITY;
 ALTER TABLE analysis_runs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE watchlist ENABLE ROW LEVEL SECURITY;
@@ -86,6 +122,10 @@ DROP POLICY IF EXISTS portfolio_positions_select ON portfolio_positions;
 DROP POLICY IF EXISTS portfolio_positions_insert ON portfolio_positions;
 DROP POLICY IF EXISTS portfolio_positions_update ON portfolio_positions;
 DROP POLICY IF EXISTS portfolio_positions_delete ON portfolio_positions;
+DROP POLICY IF EXISTS kis_credentials_select ON kis_credentials;
+DROP POLICY IF EXISTS kis_credentials_insert ON kis_credentials;
+DROP POLICY IF EXISTS kis_credentials_update ON kis_credentials;
+DROP POLICY IF EXISTS kis_credentials_delete ON kis_credentials;
 DROP POLICY IF EXISTS signals_select ON signals;
 DROP POLICY IF EXISTS analysis_runs_select ON analysis_runs;
 
@@ -105,13 +145,22 @@ CREATE POLICY portfolio_positions_update ON portfolio_positions
 CREATE POLICY portfolio_positions_delete ON portfolio_positions
     FOR DELETE TO authenticated USING (user_id = auth.uid());
 
+CREATE POLICY kis_credentials_select ON kis_credentials
+    FOR SELECT TO authenticated USING (user_id = auth.uid());
+CREATE POLICY kis_credentials_insert ON kis_credentials
+    FOR INSERT TO authenticated WITH CHECK (user_id = auth.uid());
+CREATE POLICY kis_credentials_update ON kis_credentials
+    FOR UPDATE TO authenticated USING (user_id = auth.uid()) WITH CHECK (user_id = auth.uid());
+CREATE POLICY kis_credentials_delete ON kis_credentials
+    FOR DELETE TO authenticated USING (user_id = auth.uid());
+
 CREATE POLICY signals_select ON signals
     FOR SELECT TO authenticated USING (true);
 CREATE POLICY analysis_runs_select ON analysis_runs
     FOR SELECT TO authenticated USING (true);
 
 GRANT SELECT ON analysis_runs, signals TO authenticated;
-GRANT SELECT, INSERT, UPDATE, DELETE ON portfolio_cash, portfolio_positions TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON portfolio_cash, portfolio_positions, kis_credentials TO authenticated;
 GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO authenticated;
 
 NOTIFY pgrst, 'reload schema';
