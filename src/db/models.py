@@ -170,3 +170,44 @@ class AnalysisRequest(Base):
     started_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     finished_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+
+class UserCompanyResearch(Base):
+    """Per-user research workspace for one ticker."""
+
+    __tablename__ = "user_company_research"
+    __table_args__ = (UniqueConstraint("user_id", "symbol", name="uq_user_company_research"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[UuidType] = mapped_column(UUID(as_uuid=True), nullable=False, index=True)
+    symbol: Mapped[str] = mapped_column(String(32), nullable=False)
+    market: Mapped[str] = mapped_column(String(8), nullable=False)
+    name: Mapped[str] = mapped_column(String(128), nullable=False, default="")
+    watching: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    study_progress: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    overall_sentiment: Mapped[str] = mapped_column(String(16), nullable=False, default="NEUTRAL")
+    confidence: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    last_studied_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+
+class ResearchNotification(Base):
+    """In-app research alert. Push delivery can be added later."""
+
+    __tablename__ = "research_notifications"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[UuidType] = mapped_column(UUID(as_uuid=True), nullable=False)
+    symbol: Mapped[str] = mapped_column(String(32), nullable=False)
+    type: Mapped[str] = mapped_column(String(64), nullable=False)
+    title: Mapped[str] = mapped_column(String(256), nullable=False)
+    message: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    read_yn: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )

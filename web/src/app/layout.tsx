@@ -18,7 +18,7 @@ const mono = IBM_Plex_Mono({
 
 export const metadata: Metadata = {
   title: "Stock Agent",
-  description: "한국·미국 주식 분석과 보유종목 관리",
+  description: "한국·미국 주식 분석과 기업 연구 노트",
 };
 
 export default function RootLayout({

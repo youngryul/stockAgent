@@ -8,6 +8,7 @@ import { createClient } from "@/lib/supabase/client";
 
 const NAV = [
   { href: "/", label: "분석" },
+  { href: "/research", label: "기업연구" },
   { href: "/portfolio", label: "보유종목" },
 ];
 
@@ -47,7 +48,10 @@ export function AppShell({ email, children }: AppShellProps): ReactElement {
           {email ? <span className="mr-1 hidden text-xs text-hold sm:inline">{email}</span> : null}
           <nav className="flex rounded-full border border-line bg-ink-800 p-1">
             {NAV.map((item) => {
-              const active = pathname === item.href;
+              const active =
+                item.href === "/"
+                  ? pathname === "/"
+                  : pathname === item.href || pathname.startsWith(`${item.href}/`);
               const pending = pendingHref === item.href && !active;
               return (
                 <Link

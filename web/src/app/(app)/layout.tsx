@@ -4,7 +4,7 @@ import { AppShell } from "@/components/AppShell";
 import { createClient } from "@/lib/supabase/server";
 
 /**
- * Keep the 분석 / 보유종목 nav mounted while each page's data loads.
+ * Keep the 분석 / 기업연구 / 보유종목 nav mounted while each page's data loads.
  */
 export default async function AppLayout({
   children,
