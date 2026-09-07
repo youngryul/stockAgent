@@ -10,6 +10,7 @@ const NAV = [
   { href: "/", label: "분석" },
   { href: "/research", label: "기업연구" },
   { href: "/portfolio", label: "보유종목" },
+  { href: "/dividends", label: "배당관리" },
 ];
 
 type AppShellProps = {
