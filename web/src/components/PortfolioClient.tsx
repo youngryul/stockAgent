@@ -114,9 +114,9 @@ export function PortfolioClient({
           ? "미국 잔고는 조회되지 않아 기존 미국 종목은 그대로 두었습니다."
           : `미국 ${payload.imported?.usCount ?? 0}종목`;
       setKisMessage(
-        `기존 보유는 유지하고, 한국 ${payload.imported?.krCount ?? 0}종목${
-          payload.imported?.usCount === null ? "" : `, ${usText}`
-        }을 합쳤습니다.`,
+        `이 계좌 잔고로 새로 맞췄습니다: 한국 ${payload.imported?.krCount ?? 0}종목${
+          payload.imported?.usCount === null ? ` (${usText})` : `, ${usText}`
+        }. 매도된 종목은 삭제했습니다.`,
       );
     } finally {
       setPending(false);

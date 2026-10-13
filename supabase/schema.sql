@@ -73,6 +73,8 @@ CREATE TABLE IF NOT EXISTS portfolio_cash (
 
 ALTER TABLE portfolio_positions ADD COLUMN IF NOT EXISTS stop_loss DOUBLE PRECISION;
 ALTER TABLE portfolio_positions ADD COLUMN IF NOT EXISTS take_profit DOUBLE PRECISION;
+-- NULL = 직접 입력, 값이 있으면 해당 KIS 계좌(account_key)에서 가져온 종목
+ALTER TABLE portfolio_positions ADD COLUMN IF NOT EXISTS source_account VARCHAR(16);
 
 CREATE TABLE IF NOT EXISTS kis_credentials (
     user_id UUID NOT NULL REFERENCES auth.users (id) ON DELETE CASCADE,

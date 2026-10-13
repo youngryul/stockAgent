@@ -27,7 +27,7 @@ export async function GET(): Promise<NextResponse> {
 }
 
 /**
- * Import Korea Investment holdings and merge them into existing positions.
+ * Import Korea Investment holdings, replacing what was previously imported from the same account.
  */
 export async function POST(request: Request): Promise<NextResponse> {
   const auth = await requireApiUser();
@@ -90,7 +90,10 @@ export async function POST(request: Request): Promise<NextResponse> {
     }
 
     const snapshot = await fetchKisHoldings(credentials);
-    const portfolio = await applyKisHoldings(snapshot);
+    const portfolio = await applyKisHoldings(
+      snapshot,
+      `${credentials.cano}${credentials.accountProductCode}`,
+    );
     const kis = await fetchKisCredentialStatus();
     return NextResponse.json({
       ...portfolio,

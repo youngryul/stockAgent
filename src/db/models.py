@@ -138,6 +138,8 @@ class PortfolioPosition(Base):
     avg_cost: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     stop_loss: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     take_profit: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    # NULL = 직접 입력, 값이 있으면 해당 KIS 계좌(account_key)에서 가져온 종목
+    source_account: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
     )

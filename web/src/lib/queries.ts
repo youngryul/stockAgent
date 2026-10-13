@@ -306,20 +306,26 @@ export type PositionInput = {
 };
 
 /**
- * Merge a Korea Investment snapshot into existing holdings. Matching symbols are updated; others stay.
+ * Replace one Korea Investment account's holdings with a fresh snapshot.
+ * 이 계좌에서 가져왔던 종목 중 잔고에 없는 것(매도 완료)은 삭제하고,
+ * 직접 입력한 종목·다른 계좌 종목은 그대로 둔다.
  * @param snapshot - Cash plus mapped KIS positions
+ * @param accountKey - 가져온 계좌 (CANO + 상품코드 10자리)
  */
-export async function applyKisHoldings(snapshot: {
-  cashAmount: number | null;
-  krPositions: PositionInput[];
-  usPositions: PositionInput[] | null;
-}): Promise<PortfolioSnapshot> {
+export async function applyKisHoldings(
+  snapshot: {
+    cashAmount: number | null;
+    krPositions: PositionInput[];
+    usPositions: PositionInput[] | null;
+  },
+  accountKey: string,
+): Promise<PortfolioSnapshot> {
   const supabase = await createClient();
   const userId = await requireUserId();
   const now = new Date().toISOString();
   const { data: existingRows, error: existingError } = await supabase
     .from("portfolio_positions")
-    .select(POSITION_COLUMNS)
+    .select(`${POSITION_COLUMNS}, source_account`)
     .eq("user_id", userId);
   if (existingError) {
     throw existingError;
@@ -337,6 +343,7 @@ export async function applyKisHoldings(snapshot: {
       avg_cost: item.avgCost,
       stop_loss: saved?.stopLoss ?? null,
       take_profit: saved?.takeProfit ?? null,
+      source_account: accountKey,
       updated_at: now,
     };
   });
@@ -346,6 +353,28 @@ export async function applyKisHoldings(snapshot: {
       .upsert(toUpsert, { onConflict: "user_id,symbol" });
     if (upsertError) {
       throw upsertError;
+    }
+  }
+
+  // 새 잔고를 반영한 뒤, 이 계좌 종목 중 잔고에서 사라진 것(매도 완료)을 삭제한다.
+  // 미국 잔고 조회에 실패했으면(usPositions === null) 미국 종목은 지우지 않는다.
+  const incomingSymbols = new Set(incoming.map((item) => item.symbol));
+  const staleIds = (existingRows || [])
+    .filter(
+      (row) =>
+        row.source_account === accountKey &&
+        !incomingSymbols.has(row.symbol) &&
+        (row.market !== "US" || snapshot.usPositions !== null),
+    )
+    .map((row) => row.id);
+  if (staleIds.length > 0) {
+    const { error: deleteError } = await supabase
+      .from("portfolio_positions")
+      .delete()
+      .eq("user_id", userId)
+      .in("id", staleIds);
+    if (deleteError) {
+      throw deleteError;
     }
   }
 
