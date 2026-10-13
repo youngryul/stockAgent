@@ -11,6 +11,7 @@ import {
   displaySymbol,
   formatDate,
   formatDateTime,
+  formatNumber,
   formatPercent,
   formatTime,
   marketLabel,
@@ -232,7 +233,11 @@ function SymbolRow({ group }: { group: SymbolGroup }): ReactElement {
             {displaySymbol(group.symbol, group.name)}
           </h2>
           <p className="mt-1 text-xs text-hold">
-            {marketLabel(group.market)} · 오늘 {group.scans.length}회 스캔
+            {marketLabel(group.market)}
+            {latestSignals[0]?.currentPrice != null
+              ? ` · 현재가 ${formatNumber(latestSignals[0].currentPrice)}`
+              : ""}
+            {" "}· 오늘 {group.scans.length}회 스캔
             {latest?.scannedAt ? ` · 최근 ${formatTime(latest.scannedAt)}` : ""}
           </p>
         </div>

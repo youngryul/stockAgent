@@ -4,7 +4,9 @@ import { decryptSecret, encryptSecret } from "@/lib/kis/crypto";
 import type { KisCredentials, KisEnvironment } from "@/lib/kis/client";
 import { parseKisAccount } from "@/lib/kis/client";
 import { portfolioNoteFor } from "@/lib/portfolio-note";
+import { fetchQuotes } from "@/lib/research/market";
 import { createClient } from "@/lib/supabase/server";
+import type { CompanyQuote } from "@/lib/research/types";
 import type {
   AnalysisRun,
   AnalysisRequest,
@@ -72,6 +74,24 @@ function toPosition(row: {
     stopLoss: asNullableNumber(row.stop_loss),
     takeProfit: asNullableNumber(row.take_profit),
     updatedAt: asIso(row.updated_at),
+  };
+}
+
+/**
+ * 실시간 시세를 우선 쓰고, 없으면 분석 시점 종가(raw_json.current_price)로 대체한다.
+ * @param quote - Yahoo 실시간 시세
+ * @param raw - 시그널 raw_json
+ */
+function currentPriceFor(
+  quote: CompanyQuote | undefined,
+  raw: JsonMap | null,
+): Pick<Signal, "currentPrice" | "priceIsLive"> {
+  if (quote && quote.price !== null) {
+    return { currentPrice: quote.price, priceIsLive: true };
+  }
+  return {
+    currentPrice: asNullableNumber(raw ? raw.current_price : null),
+    priceIsLive: false,
   };
 }
 
@@ -176,6 +196,8 @@ export async function fetchTodaysSignals(): Promise<{
     errorMessage: latest.error_message,
   };
   const runById = new Map(runRows.map((item) => [item.id, item]));
+  // 추천 종목 현재가를 한 번에 조회 (실패 시 분석 시점 종가로 대체)
+  const quotes = await fetchQuotes((rows || []).map((row) => row.symbol));
 
   const signals: Signal[] = (rows || []).map((row) => {
     const raw = (row.raw_json as JsonMap | null) || null;
@@ -195,6 +217,7 @@ export async function fetchTodaysSignals(): Promise<{
       entryHint: asNullableNumber(row.entry_hint),
       stopLoss: asNullableNumber(row.stop_loss),
       takeProfit: asNullableNumber(row.take_profit),
+      ...currentPriceFor(quotes.get(row.symbol), raw),
       holdingPeriodHint: row.holding_period_hint,
       rationale: row.rationale || "",
       newsSummary: textFromRaw(raw, "news_summary"),

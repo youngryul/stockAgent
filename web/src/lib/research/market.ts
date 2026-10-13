@@ -23,50 +23,87 @@ export async function fetchQuote(symbol: string): Promise<CompanyQuote> {
  */
 export async function fetchQuotes(symbols: string[]): Promise<Map<string, CompanyQuote>> {
   const unique = [...new Set(symbols.filter(Boolean))];
-  const result = new Map<string, CompanyQuote>();
-  if (unique.length === 0) {
-    return result;
-  }
+  // v7 quote API는 crumb 인증이 필요해 401을 반환하므로, 인증 없는 v8 chart API를 종목별로 병렬 호출한다
+  const quotes = await Promise.all(unique.map((symbol) => fetchChartQuote(symbol)));
+  return new Map(quotes.map((quote) => [quote.symbol, quote]));
+}
+
+async function fetchChartQuote(symbol: string): Promise<CompanyQuote> {
   try {
-    const url = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${encodeURIComponent(unique.join(","))}`;
+    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=1d&interval=1d`;
     const response = await fetch(url, {
       headers: { "User-Agent": YAHOO_UA, Accept: "application/json" },
       next: { revalidate: 60 },
     });
     if (!response.ok) {
-      unique.forEach((symbol) => result.set(symbol, emptyQuote(symbol)));
-      return result;
+      return emptyQuote(symbol);
     }
     const payload = (await response.json()) as {
-      quoteResponse?: { result?: Array<Record<string, unknown>> };
+      chart?: { result?: Array<{ meta?: Record<string, unknown> }> };
     };
-    const rows = payload.quoteResponse?.result || [];
-    for (const row of rows) {
-      const symbol = String(row.symbol || "");
-      const price = asNumber(row.regularMarketPrice);
-      const previous = asNumber(row.regularMarketPreviousClose);
-      const changePct = asNumber(row.regularMarketChangePercent);
-      result.set(symbol, {
-        symbol,
-        price,
-        previousClose: previous,
-        changePct,
-        currency: String(row.currency || (symbol.endsWith(".KS") || symbol.endsWith(".KQ") ? "KRW" : "USD")),
-        asOf: row.regularMarketTime
-          ? new Date(Number(row.regularMarketTime) * 1000).toISOString()
-          : new Date().toISOString(),
-      });
+    const meta = payload.chart?.result?.[0]?.meta;
+    if (!meta) {
+      return emptyQuote(symbol);
     }
+    const price = asNumber(meta.regularMarketPrice);
+    const previous = asNumber(meta.chartPreviousClose ?? meta.previousClose);
+    const changePct =
+      asNumber(meta.regularMarketChangePercent) ??
+      (price !== null && previous ? ((price - previous) / previous) * 100 : null);
+    return {
+      symbol,
+      price,
+      previousClose: previous,
+      changePct,
+      currency: String(meta.currency || emptyQuote(symbol).currency),
+      asOf: meta.regularMarketTime
+        ? new Date(Number(meta.regularMarketTime) * 1000).toISOString()
+        : new Date().toISOString(),
+    };
   } catch {
-    unique.forEach((symbol) => result.set(symbol, emptyQuote(symbol)));
-    return result;
+    return emptyQuote(symbol);
   }
-  unique.forEach((symbol) => {
-    if (!result.has(symbol)) {
-      result.set(symbol, emptyQuote(symbol));
-    }
+}
+
+type YahooSession = { cookie: string; crumb: string; expiresAt: number };
+
+let yahooSession: YahooSession | null = null;
+
+/**
+ * v7 quote API용 쿠키+crumb 발급 (fc.yahoo.com 쿠키 → getcrumb). 30분간 재사용한다.
+ */
+async function getYahooSession(): Promise<YahooSession> {
+  if (yahooSession && yahooSession.expiresAt > Date.now()) {
+    return yahooSession;
+  }
+  const cookieResponse = await fetch("https://fc.yahoo.com", {
+    headers: { "User-Agent": YAHOO_UA },
+    redirect: "manual",
+    cache: "no-store",
   });
-  return result;
+  const cookie = cookieResponse.headers
+    .getSetCookie()
+    .map((item) => item.split(";")[0])
+    .join("; ");
+  const crumbResponse = await fetch("https://query1.finance.yahoo.com/v1/test/getcrumb", {
+    headers: { "User-Agent": YAHOO_UA, Cookie: cookie },
+    cache: "no-store",
+  });
+  const crumb = (await crumbResponse.text()).trim();
+  if (!crumbResponse.ok || !crumb || crumb.includes("<")) {
+    throw new Error(`Yahoo crumb 발급 실패 (${crumbResponse.status})`);
+  }
+  yahooSession = { cookie, crumb, expiresAt: Date.now() + 30 * 60 * 1000 };
+  return yahooSession;
+}
+
+async function fetchQuoteWithCrumb(symbol: string): Promise<Response> {
+  const { cookie, crumb } = await getYahooSession();
+  const url = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${encodeURIComponent(symbol)}&crumb=${encodeURIComponent(crumb)}`;
+  return fetch(url, {
+    headers: { "User-Agent": YAHOO_UA, Accept: "application/json", Cookie: cookie },
+    next: { revalidate: 300 },
+  });
 }
 
 /**
@@ -75,11 +112,12 @@ export async function fetchQuotes(symbols: string[]): Promise<Map<string, Compan
  */
 export async function fetchFundamentals(symbol: string): Promise<Record<string, unknown>> {
   try {
-    const url = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${encodeURIComponent(symbol)}`;
-    const response = await fetch(url, {
-      headers: { "User-Agent": YAHOO_UA, Accept: "application/json" },
-      next: { revalidate: 300 },
-    });
+    let response = await fetchQuoteWithCrumb(symbol);
+    if (response.status === 401) {
+      // crumb·쿠키가 만료됐으면 한 번 새로 발급받아 재시도
+      yahooSession = null;
+      response = await fetchQuoteWithCrumb(symbol);
+    }
     if (!response.ok) {
       return { symbol };
     }

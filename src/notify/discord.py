@@ -55,6 +55,14 @@ def symbol_display_label(signal: dict[str, Any]) -> str:
     return symbol or "-"
 
 
+def _price_text(value: Any) -> str:
+    """Format a price with thousands separators, trimming trailing zeros."""
+    try:
+        return f"{float(value):,.4f}".rstrip("0").rstrip(".")
+    except (TypeError, ValueError):
+        return str(value)
+
+
 def format_embed(signal: dict[str, Any]) -> dict[str, Any]:
     """Build a Discord embed payload for one signal."""
     action = (signal.get("action") or "HOLD").upper()
@@ -77,6 +85,10 @@ def format_embed(signal: dict[str, Any]) -> dict[str, Any]:
             "inline": True,
         },
     ]
+    if signal.get("current_price") is not None:
+        fields.append(
+            {"name": "현재가", "value": _price_text(signal["current_price"]), "inline": True}
+        )
     if signal.get("entry_hint") is not None:
         fields.append({"name": "진입가", "value": str(signal["entry_hint"]), "inline": True})
     if signal.get("stop_loss") is not None:
@@ -155,10 +167,13 @@ def notify_recommendation_digest(signals: list[dict[str, Any]]) -> bool:
         if not items:
             return "_없음_"
         ranked = sorted(items, key=lambda x: float(x.get("confidence") or 0), reverse=True)
-        parts = [
-            f"`{symbol_display_label(s)}` ({float(s.get('confidence') or 0):.0%})"
-            for s in ranked[:8]
-        ]
+        parts = []
+        for s in ranked[:8]:
+            price = s.get("current_price")
+            price_part = f" {_price_text(price)}" if price is not None else ""
+            parts.append(
+                f"`{symbol_display_label(s)}`{price_part} ({float(s.get('confidence') or 0):.0%})"
+            )
         return ", ".join(parts)
 
     embed = {

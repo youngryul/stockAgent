@@ -19,6 +19,10 @@ export type Signal = {
   entryHint: number | null;
   stopLoss: number | null;
   takeProfit: number | null;
+  /** 실시간 현재가 (조회 실패 시 분석 시점 종가) */
+  currentPrice: number | null;
+  /** true면 실시간 시세, false면 분석 시점 종가 */
+  priceIsLive: boolean;
   holdingPeriodHint: string | null;
   rationale: string;
   newsSummary: string;

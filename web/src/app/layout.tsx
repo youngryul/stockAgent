@@ -27,8 +27,11 @@ export default function RootLayout({
   children: ReactNode;
 }>): ReactElement {
   return (
-    <html lang="ko">
-      <body className={`${sans.variable} ${mono.variable} font-sans text-slate-100 antialiased`}>
+    <html lang="ko" suppressHydrationWarning>
+      <body
+        className={`${sans.variable} ${mono.variable} font-sans text-slate-100 antialiased`}
+        suppressHydrationWarning
+      >
         {children}
       </body>
     </html>

@@ -294,6 +294,10 @@ def _write_run_signals(state: AgentState, session: Session) -> list[dict[str, An
             signal_data["name"] = resolve_symbol_name(
                 symbol, item.get("name") or signal_data.get("name")
             )
+            # 분석 시점 현재가(최근 종가)를 함께 저장해 알림·화면에서 보여준다
+            features = item.get("ohlcv_features") or {}
+            if signal_data.get("current_price") is None and features.get("last_close") is not None:
+                signal_data["current_price"] = features["last_close"]
             row = Signal(
                 run_id=run_id,
                 symbol=signal_data.get("symbol", item["symbol"]),

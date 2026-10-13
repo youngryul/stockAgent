@@ -137,7 +137,13 @@ export function SignalCard({ signal, hideSymbol = false }: SignalCardProps): Rea
           </div>
         </div>
 
-        <dl className="grid grid-cols-2 gap-2 pl-2 text-sm md:grid-cols-4">
+        <dl className="grid grid-cols-2 gap-2 pl-2 text-sm md:grid-cols-5">
+          <div>
+            <dt className="text-xs text-hold">
+              현재가{signal.priceIsLive || signal.currentPrice === null ? "" : " (분석 시점)"}
+            </dt>
+            <dd className="font-mono num">{formatNumber(signal.currentPrice)}</dd>
+          </div>
           <div>
             <dt className="text-xs text-hold">진입가</dt>
             <dd className="font-mono num">{formatNumber(signal.entryHint)}</dd>
