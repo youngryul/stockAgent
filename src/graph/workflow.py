@@ -298,6 +298,9 @@ def _write_run_signals(state: AgentState, session: Session) -> list[dict[str, An
             features = item.get("ohlcv_features") or {}
             if signal_data.get("current_price") is None and features.get("last_close") is not None:
                 signal_data["current_price"] = features["last_close"]
+            # 시그널 당시 기술 지표 원본 — 나중에 "어떤 조건에서 틀리는지" 학습용
+            if features and "error" not in features:
+                signal_data["technical_features"] = features
             row = Signal(
                 run_id=run_id,
                 symbol=signal_data.get("symbol", item["symbol"]),

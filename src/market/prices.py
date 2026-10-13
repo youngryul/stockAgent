@@ -18,6 +18,22 @@ def fetch_ohlcv(symbol: str, period: str = "6mo", interval: str = "1d") -> pd.Da
     return history[["open", "high", "low", "close", "volume"]].dropna()
 
 
+def compute_atr_pct(df: pd.DataFrame, period: int = 14) -> float | None:
+    """ATR(평균 일간 변동폭)을 마지막 종가 대비 %로 반환한다. df는 high/low/close 일봉."""
+    if df.empty or len(df) < period + 1:
+        return None
+    prev_close = df["close"].shift(1)
+    true_range = pd.concat(
+        [df["high"] - df["low"], (df["high"] - prev_close).abs(), (df["low"] - prev_close).abs()],
+        axis=1,
+    ).max(axis=1)
+    atr = true_range.tail(period).mean()
+    last = float(df["close"].iloc[-1])
+    if not last or pd.isna(atr):
+        return None
+    return round(float(atr) / last * 100, 4)
+
+
 def compute_technical_features(df: pd.DataFrame) -> dict[str, Any]:
     """Compute simple technical indicators from OHLCV."""
     if df.empty or len(df) < 30:
@@ -57,6 +73,7 @@ def compute_technical_features(df: pd.DataFrame) -> dict[str, Any]:
         "avg_volume_20": round(float(volume.tail(20).mean()), 2),
         "volume_last": round(float(volume.iloc[-1]), 2),
         "above_sma20": bool(latest > sma20.iloc[-1]),
+        "atr14_pct": compute_atr_pct(df),
     }
     if sma50 is not None and pd.notna(sma50.iloc[-1]):
         features["sma50"] = round(float(sma50.iloc[-1]), 4)

@@ -15,6 +15,8 @@ from src.db.requests import claim_pending_request, finish_request, reset_stale_r
 from src.db.scheduler_status import record_scheduler_heartbeat, record_scheduler_started
 from src.db.seed import seed_watchlist
 from src.db.session import SessionLocal
+from src.evaluation.policy import build_policy
+from src.evaluation.short_term import evaluate_short_signals
 from src.graph.workflow import run_analysis
 
 logging.basicConfig(
@@ -66,6 +68,25 @@ def cmd_once(triggered_by: str = "cli") -> int:
 def cmd_scan(triggered_by: str = "cli") -> int:
     """Scan broad KR/US universe and recommend 단타 + 장기 picks."""
     return _run("scan", triggered_by)
+
+
+def cmd_evaluate() -> int:
+    """Grade short-term BUY/SELL signals against actual prices (성적표)."""
+    try:
+        with SessionLocal() as session:
+            counts = evaluate_short_signals(session)
+        logger.info("Signal evaluation finished %s", counts or "(nothing to grade)")
+        with SessionLocal() as session:
+            policy = build_policy(session)
+    except Exception:  # noqa: BLE001
+        logger.exception("Signal evaluation failed")
+        return 1
+    logger.info(
+        "Signal policy updated: gate=%s levels=%s",
+        policy["gate_validation"],
+        {market: (lv.get("adopted"), lv.get("reason")) for market, lv in policy["levels"].items()},
+    )
+    return 0
 
 
 def cmd_schedule() -> int:
@@ -148,6 +169,11 @@ def cmd_schedule() -> int:
     )
     # 첫 분석도 스케줄러 안에서 바로 실행해, 도는 동안에도 heartbeat·웹 요청 확인이 계속되게 한다
     scheduler.add_job(job, id="analysis-initial")
+    # 성적 채점: 한국 장 마감 후(16:10)와 미국 장 마감 후(07:10, KST)에 한 번씩, 시작 시에도 한 번
+    scheduler.add_job(
+        cmd_evaluate, "cron", hour="7,16", minute=10, timezone="Asia/Seoul", id="evaluate"
+    )
+    scheduler.add_job(cmd_evaluate, id="evaluate-initial")
     try:
         scheduler.start()
     except (KeyboardInterrupt, SystemExit):
@@ -161,10 +187,10 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "command",
-        choices=["once", "scan", "schedule", "seed"],
+        choices=["once", "scan", "schedule", "seed", "evaluate"],
         help=(
             "once: watchlist | scan: universe 단타/장기 추천 | "
-            "schedule: periodic | seed: default watchlist"
+            "schedule: periodic | seed: default watchlist | evaluate: 단타 시그널 채점"
         ),
     )
     return parser
@@ -177,6 +203,7 @@ def main(argv: list[str] | None = None) -> None:
         "once": cmd_once,
         "scan": cmd_scan,
         "schedule": cmd_schedule,
+        "evaluate": cmd_evaluate,
     }
     sys.exit(commands[args.command]())
 

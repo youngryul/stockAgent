@@ -34,6 +34,13 @@ export type Signal = {
   previousAction: string | null;
   previousConfidence: number | null;
   previousAt: string | null;
+  /** 성적표 정책: CAUTION이면 과거 성적이 나쁜 유형이라 알림에서 제외됨 */
+  policyGate: string | null;
+  policyNote: string;
+  /** LLM 신뢰도를 실제 적중률로 보정한 값 */
+  calibratedConfidence: number | null;
+  /** 목표가·손절가를 ATR 기반으로 조정했을 때의 설명 */
+  policyLevelsNote: string;
   createdAt: string | null;
   runId: number;
   scannedAt: string | null;

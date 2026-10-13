@@ -115,9 +115,27 @@ export function SignalCard({ signal, hideSymbol = false }: SignalCardProps): Rea
             <span className={`rounded-full border px-2 py-0.5 text-xs ${actionClass}`}>
               {stance ? HOLDING_STANCE_LABELS[stance] : actionLabel(signal.action)}
             </span>
-            <span className="rounded-full border border-line px-2 py-0.5 font-mono text-xs num">
+            <span
+              className="rounded-full border border-line px-2 py-0.5 font-mono text-xs num"
+              title={
+                signal.calibratedConfidence !== null
+                  ? "에이전트 신뢰도 → 과거 실제 적중률로 보정한 값"
+                  : "에이전트 신뢰도"
+              }
+            >
               {formatPercent(signal.confidence)}
+              {signal.calibratedConfidence !== null
+                ? ` → 실제 ${formatPercent(signal.calibratedConfidence)}`
+                : ""}
             </span>
+            {signal.policyGate === "CAUTION" ? (
+              <span
+                className="rounded-full border border-sell/40 bg-sell/10 px-2 py-0.5 text-xs text-sell"
+                title={signal.policyNote}
+              >
+                주의 · 알림 제외
+              </span>
+            ) : null}
             {signal.isHeld ? (
               <button
                 type="button"
@@ -182,6 +200,18 @@ export function SignalCard({ signal, hideSymbol = false }: SignalCardProps): Rea
           </p>
         ) : null}
         {signal.rationale ? <p>{signal.rationale}</p> : null}
+        {signal.policyNote ? (
+          <p>
+            <span className="text-gold">성적표</span>{" "}
+            {signal.policyGate === "CAUTION" ? "과거 성적이 나빠 알림에서 제외했습니다. " : ""}
+            {signal.policyNote}
+          </p>
+        ) : null}
+        {signal.policyLevelsNote ? (
+          <p>
+            <span className="text-gold">손절·익절 조정</span> {signal.policyLevelsNote}
+          </p>
+        ) : null}
         <p>
           <span className="text-gold">뉴스</span> {signal.newsSummary || "-"}
         </p>

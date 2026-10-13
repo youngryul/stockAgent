@@ -94,6 +94,55 @@ CREATE POLICY scheduler_status_select ON scheduler_status
     FOR SELECT TO authenticated USING (true);
 GRANT SELECT ON scheduler_status TO authenticated;
 
+-- 단타 BUY/SELL 시그널 채점 결과 (성적표 탭)
+CREATE TABLE IF NOT EXISTS signal_outcomes (
+    signal_id INTEGER PRIMARY KEY REFERENCES signals (id) ON DELETE CASCADE,
+    symbol VARCHAR(32) NOT NULL,
+    market VARCHAR(8) NOT NULL,
+    horizon VARCHAR(8) NOT NULL,
+    action VARCHAR(8) NOT NULL,
+    source VARCHAR(16),
+    confidence DOUBLE PRECISION NOT NULL,
+    signal_at TIMESTAMPTZ NOT NULL,
+    base_at TIMESTAMPTZ,
+    base_price DOUBLE PRECISION,
+    entry_hint DOUBLE PRECISION,
+    stop_loss DOUBLE PRECISION,
+    take_profit DOUBLE PRECISION,
+    entry_touched BOOLEAN,
+    result VARCHAR(16) NOT NULL,
+    exit_at TIMESTAMPTZ,
+    exit_price DOUBLE PRECISION,
+    return_pct DOUBLE PRECISION,
+    return_1d DOUBLE PRECISION,
+    return_2d DOUBLE PRECISION,
+    evaluated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS ix_signal_outcomes_signal_at ON signal_outcomes (signal_at);
+ALTER TABLE signal_outcomes ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS signal_outcomes_select ON signal_outcomes;
+CREATE POLICY signal_outcomes_select ON signal_outcomes
+    FOR SELECT TO authenticated USING (true);
+GRANT SELECT ON signal_outcomes TO authenticated;
+
+-- 비용 차감 수익률, 시그널 당시 ATR, 시간순(walk-forward) 필터 판정·보정 신뢰도
+ALTER TABLE signal_outcomes ADD COLUMN IF NOT EXISTS net_return_pct DOUBLE PRECISION;
+ALTER TABLE signal_outcomes ADD COLUMN IF NOT EXISTS atr_pct DOUBLE PRECISION;
+ALTER TABLE signal_outcomes ADD COLUMN IF NOT EXISTS gate_status VARCHAR(16);
+ALTER TABLE signal_outcomes ADD COLUMN IF NOT EXISTS calibrated_confidence DOUBLE PRECISION;
+
+-- 채점 결과로 만든 개선 정책 (단일 행 JSON)
+CREATE TABLE IF NOT EXISTS signal_policy (
+    id SMALLINT PRIMARY KEY DEFAULT 1 CHECK (id = 1),
+    computed_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    policy JSONB NOT NULL
+);
+ALTER TABLE signal_policy ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS signal_policy_select ON signal_policy;
+CREATE POLICY signal_policy_select ON signal_policy
+    FOR SELECT TO authenticated USING (true);
+GRANT SELECT ON signal_policy TO authenticated;
+
 CREATE TABLE IF NOT EXISTS kis_credentials (
     user_id UUID NOT NULL REFERENCES auth.users (id) ON DELETE CASCADE,
     account_key VARCHAR(16) NOT NULL DEFAULT '',

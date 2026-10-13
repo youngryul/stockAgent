@@ -9,6 +9,8 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from src.agents.llm import KOREAN_OUTPUT_RULE, structured_invoke
 from src.agents.state import AgentState, TradeSignal
+from src.db.session import SessionLocal
+from src.evaluation.policy import apply_policy, load_policy, track_record_for
 from src.market.universe import resolve_symbol_name
 
 ACTION_KO = {"BUY": "매수", "SELL": "매도", "HOLD": "관망"}
@@ -49,6 +51,16 @@ class _SynthOut(BaseModel):
 
 _SynthOut.model_rebuild()
 
+TRACK_RECORD_RULE = (
+    "track_record, if present, is YOUR OWN graded performance on past short-term calls in this "
+    "market (net of trading costs, judged by whether take-profit or stop-loss was hit first within "
+    "2 trading days). Use it to improve average return: where avg_net_return_pct for an action is "
+    "negative, require clearly stronger evidence or choose HOLD; set confidence close to the actual "
+    "win rates in confidence_vs_actual instead of inflating it; avoid repeating the setups in "
+    "recent_stop_losses. Do not over-react when n is small (under 30). "
+    "Size stop-loss and take-profit relative to atr14_pct (average daily range) in technical_features."
+)
+
 SHORT_SYSTEM = f"""You are a short-term equity strategist for KR and US stocks.
 Goal: identify trades that can realistically work within about 1–2 trading days.
 Emphasize momentum, volume confirmation, RSI/MACD, near breakouts, and news catalysts.
@@ -56,6 +68,7 @@ Prefer HOLD unless evidence for a 1–2 day move is clear.
 action must be BUY, SELL, or HOLD.
 Suggest entry/stop/take-profit only for BUY/SELL, realistic vs last_close.
 holding_period_hint should be like "1-2 거래일".
+{TRACK_RECORD_RULE}
 {CONTINUITY_RULE}
 {KOREAN_OUTPUT_RULE}
 """
@@ -96,6 +109,7 @@ def _synthesize_one(
     item: dict,
     horizon: str,
     source: str,
+    policy: dict | None = None,
 ) -> TradeSignal:
     symbol = item["symbol"]
     name = resolve_symbol_name(symbol, item.get("name"))
@@ -117,6 +131,8 @@ def _synthesize_one(
         "fundamental": item.get("fundamental_insight"),
         "previous_analysis": previous,
     }
+    if horizon == "SHORT":
+        payload["track_record"] = track_record_for(policy, market)
     system = SHORT_SYSTEM if horizon == "SHORT" else LONG_SYSTEM
     default_period = "1-2 거래일" if horizon == "SHORT" else "3-12개월 이상"
 
@@ -183,6 +199,9 @@ def synthesize_signals(state: AgentState) -> dict:
     errors = list(state.get("errors") or [])
     mode = state.get("mode") or "watchlist"
     default_source = "SCAN" if mode == "scan" else "WATCHLIST"
+    # 채점 결과로 학습한 정책 (없으면 None — 첫 채점 전에는 원래대로 동작)
+    with SessionLocal() as session:
+        policy = load_policy(session)
 
     for item in state.get("symbols", []):
         symbol = item["symbol"]
@@ -193,8 +212,10 @@ def synthesize_signals(state: AgentState) -> dict:
             for horizon in horizons:
                 if horizon not in {"SHORT", "LONG"}:
                     continue
-                signal = _synthesize_one(item, horizon, source)
-                signals.append(signal.model_dump())
+                signal = _synthesize_one(item, horizon, source, policy)
+                signals.append(
+                    apply_policy(signal.model_dump(), policy, item.get("ohlcv_features") or {})
+                )
         except Exception as exc:  # noqa: BLE001
             errors.append(f"synthesize:{symbol}:{exc}")
 

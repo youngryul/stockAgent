@@ -86,6 +86,12 @@ class Settings(BaseSettings):
     scan_include_watchlist: bool = True
     schedule_mode: str = "scan"
 
+    # 성적표·개선 정책: 왕복 거래비용(수수료+세금, %) 가정치
+    cost_kr_pct: float = 0.25
+    cost_us_pct: float = 0.15
+    # 유형별 필터·보정·목표/손절 폭 조정을 적용하기 위한 최소 표본 수
+    policy_min_samples: int = 30
+
     @field_validator("database_url", mode="before")
     @classmethod
     def validate_database_url(cls, value: str) -> str:
