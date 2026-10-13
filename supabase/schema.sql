@@ -76,6 +76,24 @@ ALTER TABLE portfolio_positions ADD COLUMN IF NOT EXISTS take_profit DOUBLE PREC
 -- NULL = 직접 입력, 값이 있으면 해당 KIS 계좌(account_key)에서 가져온 종목
 ALTER TABLE portfolio_positions ADD COLUMN IF NOT EXISTS source_account VARCHAR(16);
 
+-- 실행 방식: schedule(정기) / web(분석 버튼) / cli(수동 명령)
+ALTER TABLE analysis_runs ADD COLUMN IF NOT EXISTS triggered_by VARCHAR(16);
+
+-- Docker 스케줄러 상태 (단일 행)
+CREATE TABLE IF NOT EXISTS scheduler_status (
+    id SMALLINT PRIMARY KEY DEFAULT 1 CHECK (id = 1),
+    started_at TIMESTAMPTZ,
+    heartbeat_at TIMESTAMPTZ,
+    next_run_at TIMESTAMPTZ,
+    interval_minutes INTEGER,
+    schedule_mode VARCHAR(16)
+);
+ALTER TABLE scheduler_status ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS scheduler_status_select ON scheduler_status;
+CREATE POLICY scheduler_status_select ON scheduler_status
+    FOR SELECT TO authenticated USING (true);
+GRANT SELECT ON scheduler_status TO authenticated;
+
 CREATE TABLE IF NOT EXISTS kis_credentials (
     user_id UUID NOT NULL REFERENCES auth.users (id) ON DELETE CASCADE,
     account_key VARCHAR(16) NOT NULL DEFAULT '',

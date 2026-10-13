@@ -58,6 +58,30 @@ export function formatDateTime(value: string | null | undefined): string {
 }
 
 /**
+ * Format an ISO timestamp as KST with seconds (e.g. 2026. 10. 13. 14:01:21).
+ * @param value - ISO date string
+ */
+export function formatKstDateTime(value: string | null | undefined): string {
+  if (!value) {
+    return "-";
+  }
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return "-";
+  }
+  return new Intl.DateTimeFormat("ko-KR", {
+    timeZone: APP_TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+  }).format(date);
+}
+
+/**
  * Format a clock time in Korean locale (e.g. 오후 1:07).
  * @param value - ISO date string
  */

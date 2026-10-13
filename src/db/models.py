@@ -89,6 +89,8 @@ class AnalysisRun(Base):
     )
     finished_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # schedule(정기) / web(분석 버튼) / cli(수동 명령)
+    triggered_by: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
 
     signals: Mapped[list[Signal]] = relationship(back_populates="run", cascade="all, delete-orphan")
 

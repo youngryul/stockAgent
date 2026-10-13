@@ -379,8 +379,11 @@ def build_graph(mode: str = "watchlist"):
     return graph.compile()
 
 
-def run_analysis(mode: str = "watchlist") -> AgentState:
-    """Create an analysis run row and execute the graph."""
+def run_analysis(mode: str = "watchlist", triggered_by: str = "cli") -> AgentState:
+    """Create an analysis run row and execute the graph.
+
+    triggered_by: schedule(정기) / web(분석 버튼) / cli(수동 명령)
+    """
     if mode not in {"watchlist", "scan"}:
         raise ValueError(f"Unsupported mode: {mode}")
 
@@ -388,6 +391,7 @@ def run_analysis(mode: str = "watchlist") -> AgentState:
         run = AnalysisRun(
             status=RunStatus.RUNNING.value,
             mode=RunMode.SCAN.value if mode == "scan" else RunMode.WATCHLIST.value,
+            triggered_by=triggered_by,
         )
         session.add(run)
         session.commit()

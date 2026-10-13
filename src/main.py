@@ -6,11 +6,13 @@ import argparse
 import logging
 import sys
 import threading
+from datetime import datetime, timedelta, timezone
 
 from apscheduler.schedulers.blocking import BlockingScheduler
 
 from src.config import get_settings
 from src.db.requests import claim_pending_request, finish_request, reset_stale_running
+from src.db.scheduler_status import record_scheduler_heartbeat, record_scheduler_started
 from src.db.seed import seed_watchlist
 from src.db.session import SessionLocal
 from src.graph.workflow import run_analysis
@@ -33,13 +35,13 @@ def cmd_seed() -> int:
     return 0
 
 
-def _run(mode: str) -> int:
+def _run(mode: str, triggered_by: str = "cli") -> int:
     settings = get_settings()
     if not settings.openai_api_key:
         logger.error("OPENAI_API_KEY is required")
         return 1
 
-    result = run_analysis(mode=mode)
+    result = run_analysis(mode=mode, triggered_by=triggered_by)
     count = len(result.get("symbols") or [])
     signal_count = sum(len(s.get("signals") or []) for s in (result.get("symbols") or []))
     errors = result.get("errors") or []
@@ -56,14 +58,14 @@ def _run(mode: str) -> int:
     return 0
 
 
-def cmd_once() -> int:
+def cmd_once(triggered_by: str = "cli") -> int:
     """Run watchlist analysis (단타 + 장기)."""
-    return _run("watchlist")
+    return _run("watchlist", triggered_by)
 
 
-def cmd_scan() -> int:
+def cmd_scan(triggered_by: str = "cli") -> int:
     """Scan broad KR/US universe and recommend 단타 + 장기 picks."""
-    return _run("scan")
+    return _run("scan", triggered_by)
 
 
 def cmd_schedule() -> int:
@@ -81,9 +83,9 @@ def cmd_schedule() -> int:
         logger.info("Scheduled analysis starting (schedule_mode=%s)", schedule_mode)
         try:
             if schedule_mode in {"watchlist", "both"}:
-                cmd_once()
+                cmd_once("schedule")
             if schedule_mode in {"scan", "both"}:
-                cmd_scan()
+                cmd_scan("schedule")
         except Exception:  # noqa: BLE001
             logger.exception("Scheduled analysis failed")
 
@@ -91,7 +93,13 @@ def cmd_schedule() -> int:
         with _run_lock:
             run_scheduled()
 
+    def next_analysis_at() -> datetime | None:
+        analysis_job = scheduler.get_job("analysis")
+        return analysis_job.next_run_time if analysis_job else None
+
     def poll_web_requests() -> None:
+        # 분석이 도는 중에도 살아 있음을 기록하도록 lock보다 먼저 남긴다
+        record_scheduler_heartbeat(datetime.now(timezone.utc), next_analysis_at())
         if not _run_lock.acquire(blocking=False):
             return
         try:
@@ -106,7 +114,7 @@ def cmd_schedule() -> int:
             ok = True
             error_message = None
             try:
-                _run(mode)
+                _run(mode, "web")
             except Exception as exc:  # noqa: BLE001
                 ok = False
                 error_message = str(exc)
@@ -119,19 +127,27 @@ def cmd_schedule() -> int:
     with SessionLocal() as session:
         reset_stale_running(session)
 
-    scheduler.add_job(job, "interval", minutes=interval, id="analysis", next_run_time=None)
+    # next_run_time=None을 넘기면 APScheduler가 job을 '일시정지' 상태로 등록하므로 넘기지 않는다.
+    # 첫 실행은 아래 job()이 직접 하고, 이후 interval마다 실행된다.
+    scheduler.add_job(job, "interval", minutes=interval, id="analysis")
     scheduler.add_job(
         poll_web_requests,
         "interval",
         seconds=REQUEST_POLL_SECONDS,
         id="web-requests",
     )
+    started_at = datetime.now(timezone.utc)
+    # interval trigger는 등록 시점 + interval에 처음 실행된다
+    record_scheduler_started(
+        started_at, interval, schedule_mode, started_at + timedelta(minutes=interval)
+    )
     logger.info(
         "Scheduler started (every %s minutes, web poll every %ss). Running first job now.",
         interval,
         REQUEST_POLL_SECONDS,
     )
-    job()
+    # 첫 분석도 스케줄러 안에서 바로 실행해, 도는 동안에도 heartbeat·웹 요청 확인이 계속되게 한다
+    scheduler.add_job(job, id="analysis-initial")
     try:
         scheduler.start()
     except (KeyboardInterrupt, SystemExit):
